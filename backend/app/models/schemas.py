@@ -384,19 +384,24 @@ class MealTemplateListResponse(BaseModel):
     Templates: list[MealTemplateWithItems]
 
 
-class MealTextParseItem(BaseModel):
-    FoodName: str
-    Quantity: float
-    Unit: str
-
-
 class MealTextParseInput(BaseModel):
     Text: str = Field(min_length=1)
     KnownFoods: Optional[list[str]] = None
 
 
 class MealTextParseResponse(BaseModel):
-    Items: list[MealTextParseItem]
+    MealName: str
+    ServingQuantity: float = 1.0
+    ServingUnit: str = "serving"
+    CaloriesPerServing: int
+    ProteinPerServing: float
+    FibrePerServing: Optional[float] = None
+    CarbsPerServing: Optional[float] = None
+    FatPerServing: Optional[float] = None
+    SaturatedFatPerServing: Optional[float] = None
+    SugarPerServing: Optional[float] = None
+    SodiumPerServing: Optional[float] = None
+    Summary: str
 
 
 class MealTemplateItemInput(BaseModel):

@@ -6,25 +6,7 @@ from app.services.openai_client import GetOpenAiContentWithModel
 from app.services.serving_conversion_service import NormalizeUnit
 
 
-_ALLOWED_UNITS = {
-    "serving",
-    "g",
-    "kg",
-    "oz",
-    "lb",
-    "mL",
-    "L",
-    "tsp",
-    "tbsp",
-    "cup",
-    "piece",
-    "slice",
-    "biscuit",
-    "handful"
-}
-
-
-def _TryParseMealItems(Content: str) -> list[dict[str, Any]] | None:
+def _TryParseMealTotals(Content: str) -> dict[str, Any] | None:
     if not Content:
         return None
     Cleaned = Content.strip()
@@ -38,18 +20,18 @@ def _TryParseMealItems(Content: str) -> list[dict[str, Any]] | None:
     except json.JSONDecodeError:
         Parsed = None
 
-    if isinstance(Parsed, list):
+    if isinstance(Parsed, dict):
         return Parsed
 
-    Start = Cleaned.find("[")
-    End = Cleaned.rfind("]")
+    Start = Cleaned.find("{")
+    End = Cleaned.rfind("}")
     if Start != -1 and End != -1 and End > Start:
         Candidate = Cleaned[Start:End + 1]
         try:
             Parsed = json.loads(Candidate)
         except json.JSONDecodeError:
             return None
-        if isinstance(Parsed, list):
+        if isinstance(Parsed, dict):
             return Parsed
 
     return None
@@ -64,7 +46,7 @@ def _NormalizeUnitValue(Unit: str) -> str:
     return Normalized or "serving"
 
 
-def ParseMealText(Text: str, KnownFoods: list[str] | None = None) -> list[dict[str, Any]]:
+def ParseMealText(Text: str, KnownFoods: list[str] | None = None) -> dict[str, Any]:
     if not Settings.OpenAiApiKey:
         raise ValueError("OpenAI API key not configured.")
 
@@ -74,29 +56,36 @@ def ParseMealText(Text: str, KnownFoods: list[str] | None = None) -> list[dict[s
     KnownFoodsText = "\n".join(f"- {Item}" for Item in KnownFoodsList)
 
     SystemPrompt = """
-You are a nutrition assistant. Parse a free text meal entry into structured items.
+You are a nutrition assistant. Given a free text meal entry, return total nutrition for the whole meal.
 
-Return ONLY a JSON array of objects with:
-[
-  {
-    "FoodName": "string",
-    "Quantity": float,
-    "Unit": "serving|g|kg|oz|lb|mL|L|tsp|tbsp|cup|piece|slice|biscuit|handful"
-  }
-]
+Return ONLY a JSON object with:
+{
+  "MealName": "string",
+  "ServingQuantity": 1.0,
+  "ServingUnit": "serving",
+  "CaloriesPerServing": integer,
+  "ProteinPerServing": float,
+  "FibrePerServing": float or null,
+  "CarbsPerServing": float or null,
+  "FatPerServing": float or null,
+  "SaturatedFatPerServing": float or null,
+  "SugarPerServing": float or null,
+  "SodiumPerServing": float or null,
+  "Summary": "short explanation, no em dashes"
+}
 
 Rules:
-- Convert fractions to decimals (half to 0.5).
-- If quantity is missing, use 1.
-- Prefer metric units (g or mL) when possible.
-- Use "serving" ONLY for named menu items or combo meals and include size in FoodName.
-- Do not include extra text. Do not include markdown.
+- Treat the input as a single meal. Do not list ingredients.
+- Prefer metric when estimating.
+- If this is an estimate, start Summary with "AI estimate.".
+- Use ServingQuantity 1 and ServingUnit "serving".
+- Do not include extra text or markdown.
 """.strip()
 
     if KnownFoodsText:
-        SystemPrompt += "\n\nKnown foods to prefer when matching names:\n" + KnownFoodsText
+        SystemPrompt += "\n\nKnown foods (for name familiarity only):\n" + KnownFoodsText
 
-    UserPrompt = f"Parse this meal entry:\n{Text.strip()}"
+    UserPrompt = f"Meal entry:\n{Text.strip()}"
 
     Content, ModelUsed = GetOpenAiContentWithModel(
         [
@@ -107,9 +96,9 @@ Rules:
         MaxTokens=500
     )
 
-    Items = _TryParseMealItems(Content)
-    if Items is None:
-        RetryPrompt = "Return ONLY the JSON array of items. No extra text."
+    Data = _TryParseMealTotals(Content)
+    if Data is None:
+        RetryPrompt = "Return ONLY the JSON object. No extra text."
         RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
             [
                 {"role": "system", "content": RetryPrompt},
@@ -118,35 +107,49 @@ Rules:
             Temperature=0.1,
             MaxTokens=300
         )
-        Items = _TryParseMealItems(RetryContent)
+        Data = _TryParseMealTotals(RetryContent)
 
-    if Items is None:
+    if Data is None:
         raise ValueError("Invalid AI response format.")
 
-    CleanItems: list[dict[str, Any]] = []
-    for Item in Items:
-        if not isinstance(Item, dict):
-            continue
-        Name = str(Item.get("FoodName", "")).strip()
-        if not Name:
-            continue
-        QuantityValue = Item.get("Quantity", 1)
+    MealName = str(Data.get("MealName", "AI meal")).strip() or "AI meal"
+    ServingQuantity = Data.get("ServingQuantity", 1.0)
+    ServingUnit = _NormalizeUnitValue(str(Data.get("ServingUnit", "serving")))
+
+    try:
+        ServingQuantity = float(ServingQuantity)
+    except (TypeError, ValueError):
+        ServingQuantity = 1.0
+
+    def _to_float(value: Any) -> float | None:
+        if value is None:
+            return None
         try:
-            QuantityFloat = float(QuantityValue)
+            return float(value)
         except (TypeError, ValueError):
-            QuantityFloat = 1.0
-        if QuantityFloat <= 0:
-            continue
-        UnitValue = _NormalizeUnitValue(str(Item.get("Unit", "serving")))
-        if UnitValue not in _ALLOWED_UNITS:
-            UnitValue = "serving"
-        CleanItems.append({
-            "FoodName": Name,
-            "Quantity": QuantityFloat,
-            "Unit": UnitValue
-        })
+            return None
 
-    if not CleanItems:
-        raise ValueError("No items parsed from AI response.")
+    Calories = Data.get("CaloriesPerServing", 0)
+    try:
+        CaloriesValue = int(float(Calories))
+    except (TypeError, ValueError):
+        CaloriesValue = 0
 
-    return CleanItems
+    Summary = str(Data.get("Summary", "AI estimate." if CaloriesValue == 0 else "")).strip()
+    if not Summary:
+        Summary = "AI estimate." if CaloriesValue == 0 else ""
+
+    return {
+        "MealName": MealName,
+        "ServingQuantity": ServingQuantity,
+        "ServingUnit": ServingUnit,
+        "CaloriesPerServing": CaloriesValue,
+        "ProteinPerServing": _to_float(Data.get("ProteinPerServing", 0)) or 0.0,
+        "FibrePerServing": _to_float(Data.get("FibrePerServing")),
+        "CarbsPerServing": _to_float(Data.get("CarbsPerServing")),
+        "FatPerServing": _to_float(Data.get("FatPerServing")),
+        "SaturatedFatPerServing": _to_float(Data.get("SaturatedFatPerServing")),
+        "SugarPerServing": _to_float(Data.get("SugarPerServing")),
+        "SodiumPerServing": _to_float(Data.get("SodiumPerServing")),
+        "Summary": Summary
+    }

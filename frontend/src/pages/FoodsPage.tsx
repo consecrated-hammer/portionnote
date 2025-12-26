@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { GetFoods, CreateFood, UpdateFood, DeleteFood, GetMealTemplates, CreateMealTemplate, UpdateMealTemplate, DeleteMealTemplate, GetFoodSuggestions, LookupFoodOptionsByText, SearchFoodDatabases, ParseMealText } from "../services/ApiClient";
-import { Food, MealTemplateWithItems, MealType } from "../models/Models";
+import { Food, MealTemplateWithItems, MealTextParseResponse, MealType } from "../models/Models";
 import { UseAuth } from "../contexts/AuthContext";
 
 const CommonServingUnits = [
@@ -40,13 +40,6 @@ type AiFoodOption = {
   SodiumPerServing?: number | null;
   Source: string;
   Confidence: string;
-};
-
-type AiMealItem = {
-  FoodName: string;
-  Quantity: number;
-  Unit: string;
-  MatchedFoodId?: string;
 };
 
 export const FoodsPage = () => {
@@ -101,9 +94,9 @@ export const FoodsPage = () => {
   const [SearchOpenFoodFacts, SetSearchOpenFoodFacts] = useState(true);
   const [SearchAI, SetSearchAI] = useState(true);
   const [DataSourceUsed, SetDataSourceUsed] = useState<string | null>(null);
-  const [ShowAiMealEntry, SetShowAiMealEntry] = useState(false);
+  const [ShowAiMealEntry, SetShowAiMealEntry] = useState(true);
   const [AiMealText, SetAiMealText] = useState("");
-  const [AiMealItems, SetAiMealItems] = useState<AiMealItem[]>([]);
+  const [AiMealTotals, SetAiMealTotals] = useState<MealTextParseResponse | null>(null);
   const [AiMealError, SetAiMealError] = useState<string | null>(null);
   const [IsParsingAiMeal, SetIsParsingAiMeal] = useState(false);
 
@@ -127,6 +120,12 @@ export const FoodsPage = () => {
   ];
 
   const RadiusPx = 60;
+
+  useEffect(() => {
+    if (IsAddingMeal && !EditingMealId) {
+      SetShowAiMealEntry(true);
+    }
+  }, [IsAddingMeal, EditingMealId]);
 
   const NormalizeMealUnit = (Unit: string) => {
     const Value = Unit.trim().toLowerCase();
@@ -184,17 +183,15 @@ export const FoodsPage = () => {
     return Array.from(new Set(Ordered));
   };
 
-  const NormalizeFoodName = (Value: string) => Value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-
-  const FindFoodMatch = (Name: string) => {
-    const Normalized = NormalizeFoodName(Name);
-    if (!Normalized) return null;
-    const Exact = Foods.find((FoodItem) => NormalizeFoodName(FoodItem.FoodName) === Normalized);
-    if (Exact) return Exact;
-    const Included = Foods.find((FoodItem) => NormalizeFoodName(FoodItem.FoodName).includes(Normalized));
-    if (Included) return Included;
-    const ReverseIncluded = Foods.find((FoodItem) => Normalized.includes(NormalizeFoodName(FoodItem.FoodName)));
-    return ReverseIncluded ?? null;
+  const BuildUniqueFoodName = (BaseName: string) => {
+    let Name = BaseName;
+    let Counter = 2;
+    const ExistingNames = new Set(Foods.map((FoodItem) => FoodItem.FoodName.toLowerCase()));
+    while (ExistingNames.has(Name.toLowerCase())) {
+      Name = `${BaseName} (${Counter})`;
+      Counter += 1;
+    }
+    return Name;
   };
 
   const GetPreviewServings = (FoodItem: Food, EntryQty: number, EntryUnit: string) => {
@@ -594,6 +591,58 @@ export const FoodsPage = () => {
     SetIsSaving(true);
 
     try {
+      if (ShowAiMealEntry) {
+        if (!AiMealTotals) {
+          throw new Error("Use AI entry to calculate totals first.");
+        }
+        const MealNameValue = NewMealName.trim() || AiMealTotals.MealName || "AI meal";
+        const FoodBaseName = `${MealNameValue} (AI total)`;
+        const FoodName = BuildUniqueFoodName(FoodBaseName);
+        const AiFood = await CreateFood({
+          FoodName,
+          ServingQuantity: AiMealTotals.ServingQuantity || 1,
+          ServingUnit: AiMealTotals.ServingUnit || "serving",
+          CaloriesPerServing: AiMealTotals.CaloriesPerServing,
+          ProteinPerServing: AiMealTotals.ProteinPerServing,
+          FibrePerServing: AiMealTotals.FibrePerServing ?? null,
+          CarbsPerServing: AiMealTotals.CarbsPerServing ?? null,
+          FatPerServing: AiMealTotals.FatPerServing ?? null,
+          SaturatedFatPerServing: AiMealTotals.SaturatedFatPerServing ?? null,
+          SugarPerServing: AiMealTotals.SugarPerServing ?? null,
+          SodiumPerServing: AiMealTotals.SodiumPerServing ?? null,
+          DataSource: "ai",
+          CountryCode: "AU",
+          IsFavourite: false
+        });
+
+        const Items = [{
+          FoodId: AiFood.FoodId,
+          MealType: "Breakfast" as MealType,
+          Quantity: 1,
+          EntryQuantity: 1,
+          EntryUnit: "serving",
+          EntryNotes: null,
+          SortOrder: 0
+        }];
+
+        await CreateMealTemplate({
+          TemplateName: MealNameValue,
+          Items
+        });
+
+        SetNewMealName("");
+        SetSelectedFoodIds(new Set());
+        SetSelectedMealItems({});
+        SetIsAddingMeal(false);
+        SetEditingMealId(null);
+        SetShowAiMealEntry(true);
+        SetAiMealText("");
+        SetAiMealTotals(null);
+        SetAiMealError(null);
+        await LoadFoods();
+        return;
+      }
+
       const Items = Array.from(SelectedFoodIds).map((FoodId, Index) => {
         const FoodItem = Foods.find((Item) => Item.FoodId === FoodId);
         const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults(FoodItem);
@@ -631,7 +680,7 @@ export const FoodsPage = () => {
       SetEditingMealId(null);
       SetShowAiMealEntry(false);
       SetAiMealText("");
-      SetAiMealItems([]);
+      SetAiMealTotals(null);
       SetAiMealError(null);
       await LoadFoods();
     } catch (ErrorValue) {
@@ -659,6 +708,7 @@ export const FoodsPage = () => {
     SetSelectedFoodIds(NextSelected);
     SetSelectedMealItems(NextItems);
     SetIsAddingMeal(true);
+    SetShowAiMealEntry(false);
   };
 
   const HandleDeleteMeal = async (MealTemplateId: string) => {
@@ -703,46 +753,18 @@ export const FoodsPage = () => {
     try {
       const KnownFoods = Foods.map((FoodItem) => FoodItem.FoodName).slice(0, 200);
       const Response = await ParseMealText(AiMealText.trim(), KnownFoods);
-      const ParsedItems = (Response.Items || []).map((Item) => {
-        const Matched = FindFoodMatch(Item.FoodName);
-        const Quantity = Number(Item.Quantity);
-        return {
-          FoodName: Item.FoodName,
-          Quantity: Number.isFinite(Quantity) && Quantity > 0 ? Quantity : 1,
-          Unit: NormalizeMealEntryUnit(Item.Unit || "serving"),
-          MatchedFoodId: Matched?.FoodId
-        };
+      SetAiMealTotals({
+        ...Response,
+        ServingUnit: NormalizeMealEntryUnit(Response.ServingUnit || "serving")
       });
-      if (ParsedItems.length === 0) {
-        SetAiMealError("No items were parsed from that entry.");
+      if (!NewMealName.trim() && Response.MealName) {
+        SetNewMealName(Response.MealName);
       }
-      SetAiMealItems(ParsedItems);
     } catch (ErrorValue) {
       SetAiMealError("AI entry parsing failed. Try a shorter description.");
     } finally {
       SetIsParsingAiMeal(false);
     }
-  };
-
-  const HandleApplyAiMealItems = () => {
-    const Missing = AiMealItems.filter((Item) => !Item.MatchedFoodId);
-    if (Missing.length > 0) {
-      SetAiMealError("Select a food match for each item before applying.");
-      return;
-    }
-    const NextSelected = new Set(SelectedFoodIds);
-    const NextItems = { ...SelectedMealItems };
-    AiMealItems.forEach((Item) => {
-      if (!Item.MatchedFoodId) return;
-      NextSelected.add(Item.MatchedFoodId);
-      NextItems[Item.MatchedFoodId] = {
-        EntryQuantity: String(Item.Quantity),
-        EntryUnit: Item.Unit
-      };
-    });
-    SetSelectedFoodIds(NextSelected);
-    SetSelectedMealItems(NextItems);
-    SetAiMealError(null);
   };
 
   if (IsLoading) {
@@ -1290,152 +1312,103 @@ export const FoodsPage = () => {
               />
             </label>
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-Ink/70">
-                  Selected foods: {SelectedFoodIds.size}
-                </span>
-                <button
-                  type="button"
-                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                  onClick={() => SetIsAddingFood(true)}
-                >
-                  + Quick add food
-                </button>
-              </div>
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  className="text-xs text-Ink/70 hover:text-Ink font-medium"
-                  onClick={() => SetShowAiMealEntry((Prev) => !Prev)}
-                >
-                  {ShowAiMealEntry ? "Hide AI entry" : "Use AI entry"}
-                </button>
-              </div>
-              {SelectedFoodIds.size > 0 && (() => {
-                const Totals = Array.from(SelectedFoodIds).reduce((Acc, FoodId) => {
-                  const FoodItem = Foods.find(F => F.FoodId === FoodId);
-                  if (!FoodItem) {
-                    return Acc;
-                  }
-                  const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults(FoodItem);
-                  const EntryQuantityValue = Number(Entry.EntryQuantity);
-                  const PreviewServings = Number.isFinite(EntryQuantityValue)
-                    ? GetPreviewServings(FoodItem, EntryQuantityValue, Entry.EntryUnit)
-                    : null;
-                  if (PreviewServings === null) {
-                    Acc.NeedsConversion += 1;
-                    Acc.Calories += FoodItem.CaloriesPerServing;
-                    Acc.Protein += FoodItem.ProteinPerServing;
-                    return Acc;
-                  }
-                  Acc.Calories += FoodItem.CaloriesPerServing * PreviewServings;
-                  Acc.Protein += FoodItem.ProteinPerServing * PreviewServings;
-                  return Acc;
-                }, { Calories: 0, Protein: 0, NeedsConversion: 0 });
-                return (
-                  <div className="space-y-1">
-                    <div className="text-xs text-Ink/70 bg-white rounded px-2 py-1.5 border border-purple-200">
-                      {Math.round(Totals.Calories)} cal • {Totals.Protein.toFixed(1)}g protein
-                    </div>
-                    {Totals.NeedsConversion > 0 && (
-                      <p className="text-[11px] text-Ink/50">
-                        Some items will be converted when logging.
-                      </p>
-                    )}
-                  </div>
-                );
-              })()}
-              <p className="text-xs text-Ink/60">
-                Select food items from the table below to add them to this meal
-              </p>
-            </div>
-
-            {ShowAiMealEntry && (
-              <div className="space-y-2 rounded-lg border border-purple-100 bg-white p-3">
-                <label className="text-sm font-medium text-Ink/70">AI meal entry</label>
+            {ShowAiMealEntry ? (
+              <div className="space-y-3 rounded-lg border border-purple-100 bg-white p-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium text-Ink/70">AI meal entry (default)</label>
+                  <button
+                    type="button"
+                    className="text-xs text-Ink/60 hover:text-Ink font-medium"
+                    onClick={() => SetShowAiMealEntry(false)}
+                  >
+                    Use manual selection
+                  </button>
+                </div>
                 <textarea
-                  className="InputField min-h-[110px]"
+                  className="InputField min-h-[120px]"
                   value={AiMealText}
                   onChange={(Event) => SetAiMealText(Event.target.value)}
                   placeholder="breakfast, 3 weet-bix, 125 mL lite milk, half a teaspoon sugar"
                 />
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="PillButton"
-                    onClick={HandleParseAiMeal}
-                    disabled={IsParsingAiMeal}
-                  >
-                    {IsParsingAiMeal ? "Parsing..." : "Parse with AI"}
-                  </button>
-                  <button
-                    type="button"
-                    className="OutlineButton"
-                    onClick={() => {
-                      SetAiMealText("");
-                      SetAiMealItems([]);
-                      SetAiMealError(null);
-                    }}
-                    disabled={IsParsingAiMeal}
-                  >
-                    Clear
-                  </button>
-                </div>
-                {AiMealError && (
-                  <p className="text-xs text-red-600">{AiMealError}</p>
-                )}
-                {AiMealItems.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs text-Ink/60">AI parsed items</p>
-                    {AiMealItems.map((Item, Index) => (
-                      <div key={`${Item.FoodName}-${Index}`} className="grid gap-2 sm:grid-cols-[1fr,1fr,120px]">
-                        <div className="text-sm text-Ink">
-                          {Item.FoodName} ({Item.Quantity} {Item.Unit})
-                        </div>
-                        <select
-                          className="InputField"
-                          value={Item.MatchedFoodId ?? ""}
-                          onChange={(Event) => {
-                            const Value = Event.target.value || undefined;
-                            SetAiMealItems((Prev) => Prev.map((Row, RowIndex) => (
-                              RowIndex === Index ? { ...Row, MatchedFoodId: Value } : Row
-                            )));
-                          }}
-                        >
-                          <option value="">Match to food</option>
-                          {Foods.map((FoodItem) => (
-                            <option key={FoodItem.FoodId} value={FoodItem.FoodId}>
-                              {FoodItem.FoodName}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="OutlineButton"
-                          onClick={() => {
-                            SetAiMealItems((Prev) => Prev.filter((_, RowIndex) => RowIndex !== Index));
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        className="PillButton"
-                        onClick={HandleApplyAiMealItems}
-                      >
-                        Apply items
-                      </button>
+                {AiMealTotals && (
+                  <div className="space-y-2 rounded-lg border border-purple-100 bg-purple-50/50 p-3">
+                    <div className="text-sm font-medium text-Ink">
+                      {AiMealTotals.MealName}
+                    </div>
+                    <div className="text-xs text-Ink/70">
+                      {AiMealTotals.CaloriesPerServing} cal • {AiMealTotals.ProteinPerServing}g protein
+                    </div>
+                    <div className="text-xs text-Ink/60">
+                      {AiMealTotals.Summary}
                     </div>
                   </div>
                 )}
+                {AiMealError && (
+                  <p className="text-xs text-red-600">{AiMealError}</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-Ink/70">
+                    Selected foods: {SelectedFoodIds.size}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                    onClick={() => SetIsAddingFood(true)}
+                  >
+                    + Quick add food
+                  </button>
+                </div>
+                {SelectedFoodIds.size > 0 && (() => {
+                  const Totals = Array.from(SelectedFoodIds).reduce((Acc, FoodId) => {
+                    const FoodItem = Foods.find(F => F.FoodId === FoodId);
+                    if (!FoodItem) {
+                      return Acc;
+                    }
+                    const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults(FoodItem);
+                    const EntryQuantityValue = Number(Entry.EntryQuantity);
+                    const PreviewServings = Number.isFinite(EntryQuantityValue)
+                      ? GetPreviewServings(FoodItem, EntryQuantityValue, Entry.EntryUnit)
+                      : null;
+                    if (PreviewServings === null) {
+                      Acc.NeedsConversion += 1;
+                      Acc.Calories += FoodItem.CaloriesPerServing;
+                      Acc.Protein += FoodItem.ProteinPerServing;
+                      return Acc;
+                    }
+                    Acc.Calories += FoodItem.CaloriesPerServing * PreviewServings;
+                    Acc.Protein += FoodItem.ProteinPerServing * PreviewServings;
+                    return Acc;
+                  }, { Calories: 0, Protein: 0, NeedsConversion: 0 });
+                  return (
+                    <div className="space-y-1">
+                      <div className="text-xs text-Ink/70 bg-white rounded px-2 py-1.5 border border-purple-200">
+                        {Math.round(Totals.Calories)} cal • {Totals.Protein.toFixed(1)}g protein
+                      </div>
+                      {Totals.NeedsConversion > 0 && (
+                        <p className="text-[11px] text-Ink/50">
+                          Some items will be converted when logging.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+                <p className="text-xs text-Ink/60">
+                  Select food items from the table below to add them to this meal
+                </p>
+                <button
+                  type="button"
+                  className="text-xs text-Ink/60 hover:text-Ink font-medium"
+                  onClick={() => SetShowAiMealEntry(true)}
+                >
+                  Use AI entry instead
+                </button>
               </div>
             )}
 
-            {SelectedFoodIds.size > 0 && (
+            {!ShowAiMealEntry && SelectedFoodIds.size > 0 && (
               <div className="space-y-3">
                 <p className="text-xs font-medium text-Ink/70">Amounts per selected food</p>
                 <div className="space-y-2">
@@ -1512,7 +1485,7 @@ export const FoodsPage = () => {
                   SetSelectedMealItems({});
                   SetShowAiMealEntry(false);
                   SetAiMealText("");
-                  SetAiMealItems([]);
+                  SetAiMealTotals(null);
                   SetAiMealError(null);
                 }}
                 disabled={IsSaving}
@@ -1520,9 +1493,26 @@ export const FoodsPage = () => {
                 Cancel
               </button>
               <button
+                className="OutlineButton flex-1"
+                type="button"
+                onClick={() => {
+                  if (ShowAiMealEntry) {
+                    void HandleParseAiMeal();
+                  } else {
+                    SetShowAiMealEntry(true);
+                  }
+                }}
+                disabled={IsSaving || (ShowAiMealEntry && IsParsingAiMeal)}
+              >
+                {ShowAiMealEntry ? (IsParsingAiMeal ? "Parsing..." : "Use AI entry") : "Use AI entry"}
+              </button>
+              <button
                 className="PillButton flex-1"
                 type="submit"
-                disabled={IsSaving || SelectedFoodIds.size === 0}
+                disabled={
+                  IsSaving ||
+                  (ShowAiMealEntry ? !AiMealTotals : SelectedFoodIds.size === 0)
+                }
               >
                 {IsSaving ? (EditingMealId ? "Updating..." : "Creating...") : (EditingMealId ? "Update meal" : "Create meal")}
               </button>

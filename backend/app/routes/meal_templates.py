@@ -39,8 +39,8 @@ async def ListMealTemplates(CurrentUser: User = Depends(RequireUser)):
 @MealTemplateRouter.post("/ai-parse", response_model=MealTextParseResponse, tags=["MealTemplates"])
 async def ParseMealTextRoute(Input: MealTextParseInput, CurrentUser: User = Depends(RequireUser)):
     try:
-        Items = ParseMealText(Input.Text, Input.KnownFoods)
-        return MealTextParseResponse(Items=Items)
+        Totals = ParseMealText(Input.Text, Input.KnownFoods)
+        return MealTextParseResponse(**Totals)
     except ValueError as ErrorValue:
         raise HTTPException(status_code=400, detail=str(ErrorValue)) from ErrorValue
     except Exception as ErrorValue:

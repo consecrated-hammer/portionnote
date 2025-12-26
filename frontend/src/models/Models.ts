@@ -206,14 +206,19 @@ export type MealTemplateListResponse = {
   Templates: MealTemplateWithItems[];
 };
 
-export type MealTextParseItem = {
-  FoodName: string;
-  Quantity: number;
-  Unit: string;
-};
-
 export type MealTextParseResponse = {
-  Items: MealTextParseItem[];
+  MealName: string;
+  ServingQuantity: number;
+  ServingUnit: string;
+  CaloriesPerServing: number;
+  ProteinPerServing: number;
+  FibrePerServing?: number;
+  CarbsPerServing?: number;
+  FatPerServing?: number;
+  SaturatedFatPerServing?: number;
+  SugarPerServing?: number;
+  SodiumPerServing?: number;
+  Summary: string;
 };
 
 export type AiSuggestion = {
