@@ -59,6 +59,34 @@ def CalculateAge(BirthDate: str) -> int:
     return Age
 
 
+def _TryParseRecommendationJson(Content: str) -> Optional[dict]:
+    Cleaned = Content.strip()
+    if "```json" in Cleaned:
+        Cleaned = Cleaned.split("```json")[1].split("```")[0].strip()
+    elif "```" in Cleaned:
+        Cleaned = Cleaned.split("```")[1].split("```")[0].strip()
+
+    try:
+        Parsed = json.loads(Cleaned)
+        if isinstance(Parsed, dict):
+            return Parsed
+    except json.JSONDecodeError:
+        pass
+
+    Start = Cleaned.find("{")
+    End = Cleaned.rfind("}")
+    if Start != -1 and End != -1 and End > Start:
+        Candidate = Cleaned[Start:End + 1]
+        try:
+            Parsed = json.loads(Candidate)
+            if isinstance(Parsed, dict):
+                return Parsed
+        except json.JSONDecodeError:
+            return None
+
+    return None
+
+
 def GetAiNutritionRecommendations(
     Age: int,
     HeightCm: int,
@@ -129,17 +157,25 @@ Provide personalized daily nutrition targets."""
     if not Content:
         raise ValueError("No response from AI.")
 
-    # Parse JSON response
-    try:
-        # Handle markdown code blocks if present
-        if "```json" in Content:
-            Content = Content.split("```json")[1].split("```")[0].strip()
-        elif "```" in Content:
-            Content = Content.split("```")[1].split("```")[0].strip()
-        
-        RecommendationData = json.loads(Content)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid AI response format: {e}")
+    RecommendationData = _TryParseRecommendationJson(Content)
+    if RecommendationData is None:
+        RetrySystemPrompt = (
+            "You are a formatter. Return ONLY valid JSON with the required fields. "
+            "Do not include extra text. Explanation must not contain double quotes."
+        )
+        RetryUserPrompt = f"Reformat this into valid JSON only:\n{Content}"
+        RetryContent, RetryModelUsed = GetOpenAiContentWithModel(
+            [
+                {"role": "system", "content": RetrySystemPrompt},
+                {"role": "user", "content": RetryUserPrompt}
+            ],
+            Temperature=0.1,
+            MaxTokens=400
+        )
+        RecommendationData = _TryParseRecommendationJson(RetryContent)
+        if RecommendationData is None:
+            raise ValueError("Invalid AI response format.")
+        ModelUsed = RetryModelUsed
 
     Recommendation = NutritionRecommendation(
         DailyCalorieTarget=int(RecommendationData.get("DailyCalorieTarget", 2000)),
