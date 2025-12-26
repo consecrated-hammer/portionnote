@@ -247,8 +247,9 @@ When size variants exist for menu items or branded meals, include small, medium,
         Temperature=0.3,
         MaxTokens=700
     )
-    FoodData = ParseLookupJson(Content)
-    if not isinstance(FoodData, (dict, list)):
+    try:
+        FoodData = ParseLookupJson(Content)
+    except ValueError:
         RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
             [
                 {
@@ -264,6 +265,8 @@ When size variants exist for menu items or branded meals, include small, medium,
             MaxTokens=400
         )
         FoodData = ParseLookupJson(RetryContent)
+    if not isinstance(FoodData, (dict, list)):
+        raise ValueError("Invalid AI response format.")
 
     if isinstance(FoodData, dict):
         FoodData = [FoodData]

@@ -26,12 +26,14 @@ class MealTemplateResponse(BaseModel):
     Template: MealTemplateWithItems
 
 
+@MealTemplateRouter.get("", response_model=MealTemplateListResponse, tags=["MealTemplates"])
 @MealTemplateRouter.get("/", response_model=MealTemplateListResponse, tags=["MealTemplates"])
 async def ListMealTemplates(CurrentUser: User = Depends(RequireUser)):
     Templates = GetMealTemplates(CurrentUser.UserId)
     return MealTemplateListResponse(Templates=Templates)
 
 
+@MealTemplateRouter.post("", response_model=MealTemplateResponse, status_code=201, tags=["MealTemplates"])
 @MealTemplateRouter.post("/", response_model=MealTemplateResponse, status_code=201, tags=["MealTemplates"])
 async def CreateMealTemplateRoute(
     Input: CreateMealTemplateInput,
