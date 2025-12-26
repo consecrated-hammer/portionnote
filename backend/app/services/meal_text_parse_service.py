@@ -81,6 +81,7 @@ Rules:
 - Use ServingQuantity 1 and ServingUnit "serving".
 - Do not include extra text or markdown.
 - Keep Summary under 200 characters.
+- Populate Fibre, Carbs, Fat, SaturatedFat, Sugar, and Sodium when possible.
 """.strip()
 
     if KnownFoodsText:
@@ -94,7 +95,9 @@ Rules:
             {"role": "user", "content": UserPrompt}
         ],
         Temperature=0.2,
-        MaxTokens=900
+        MaxTokens=1400,
+        ReasoningEffort="medium",
+        TextVerbosity="low"
     )
 
     Data = _TryParseMealTotals(Content)
@@ -106,7 +109,9 @@ Rules:
                 {"role": "user", "content": Content}
             ],
             Temperature=0.1,
-            MaxTokens=500
+            MaxTokens=800,
+            ReasoningEffort="medium",
+            TextVerbosity="low"
         )
         Data = _TryParseMealTotals(RetryContent)
 
@@ -151,7 +156,9 @@ Rules:
                 {"role": "user", "content": UserPrompt}
             ],
             Temperature=0.1,
-            MaxTokens=1200
+            MaxTokens=1600,
+            ReasoningEffort="high",
+            TextVerbosity="low"
         )
         Data = _TryParseMealTotals(RetryContent)
         if Data is None:

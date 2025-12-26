@@ -1343,6 +1343,12 @@ export const FoodsPage = () => {
                       {AiMealTotals.CaloriesPerServing} cal • {AiMealTotals.ProteinPerServing}g protein
                     </div>
                     <div className="text-xs text-Ink/60">
+                      {AiMealTotals.FibrePerServing ?? 0}g fibre • {AiMealTotals.CarbsPerServing ?? 0}g carbs • {AiMealTotals.FatPerServing ?? 0}g fat
+                    </div>
+                    <div className="text-xs text-Ink/60">
+                      {AiMealTotals.SaturatedFatPerServing ?? 0}g sat fat • {AiMealTotals.SugarPerServing ?? 0}g sugar • {AiMealTotals.SodiumPerServing ?? 0}mg sodium
+                    </div>
+                    <div className="text-xs text-Ink/60">
                       {AiMealTotals.Summary}
                     </div>
                   </div>

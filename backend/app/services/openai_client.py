@@ -117,7 +117,9 @@ def _RequestOpenAiContent(
     Model: str,
     Messages: list[dict[str, Any]],
     Temperature: float,
-    MaxTokens: int | None
+    MaxTokens: int | None,
+    ReasoningEffort: str | None,
+    TextVerbosity: str | None
 ) -> tuple[str, str]:
     if not Settings.OpenAiApiKey:
         raise ValueError("OpenAI API key not configured.")
@@ -131,8 +133,8 @@ def _RequestOpenAiContent(
         Payload: dict[str, Any] = {
             "model": Model,
             "input": _BuildResponsesInput(Messages),
-            "reasoning": {"effort": "low"},
-            "text": {"format": {"type": "text"}, "verbosity": "low"}
+            "reasoning": {"effort": ReasoningEffort or "low"},
+            "text": {"format": {"type": "text"}, "verbosity": TextVerbosity or "low"}
         }
         if SupportsTemperature:
             Payload["temperature"] = Temperature
@@ -181,7 +183,9 @@ def _RequestOpenAiContent(
 def GetOpenAiContentWithModel(
     Messages: list[dict[str, Any]],
     Temperature: float,
-    MaxTokens: int | None = None
+    MaxTokens: int | None = None,
+    ReasoningEffort: str | None = None,
+    TextVerbosity: str | None = None
 ) -> tuple[str, str]:
     ModelsToTry = [Settings.OpenAiModel]
     for Model in _ParseFallbackModels():
@@ -191,7 +195,7 @@ def GetOpenAiContentWithModel(
     LastError: Exception | None = None
     for Model in ModelsToTry:
         try:
-            return _RequestOpenAiContent(Model, Messages, Temperature, MaxTokens)
+            return _RequestOpenAiContent(Model, Messages, Temperature, MaxTokens, ReasoningEffort, TextVerbosity)
         except ValueError as ErrorValue:
             LastError = ErrorValue
             if str(ErrorValue) != "OpenAI model unavailable.":
@@ -206,9 +210,11 @@ def GetOpenAiContentForModel(
     Model: str,
     Messages: list[dict[str, Any]],
     Temperature: float,
-    MaxTokens: int | None = None
+    MaxTokens: int | None = None,
+    ReasoningEffort: str | None = None,
+    TextVerbosity: str | None = None
 ) -> tuple[str, str]:
-    return _RequestOpenAiContent(Model, Messages, Temperature, MaxTokens)
+    return _RequestOpenAiContent(Model, Messages, Temperature, MaxTokens, ReasoningEffort, TextVerbosity)
 
 
 def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxTokens: int | None = None) -> str:
