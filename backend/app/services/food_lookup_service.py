@@ -9,7 +9,7 @@ from typing import Optional
 import httpx
 
 from app.config import Settings
-from app.services.openai_client import GetOpenAiContent
+from app.services.openai_client import GetOpenAiContentWithModel
 from app.utils.logger import GetLogger
 
 Logger = GetLogger("food_lookup_service")
@@ -479,8 +479,34 @@ Example for "veg":
 
     UserPrompt = f'Suggest Australian foods matching: "{Query}"'
 
+    def TryParseSuggestions(ContentValue: str) -> list[str] | None:
+        if not ContentValue:
+            return None
+        Cleaned = ContentValue.strip()
+        if "```json" in Cleaned:
+            Cleaned = Cleaned.split("```json")[1].split("```")[0].strip()
+        elif "```" in Cleaned:
+            Cleaned = Cleaned.split("```")[1].split("```")[0].strip()
+        try:
+            Parsed = json.loads(Cleaned)
+            if isinstance(Parsed, list):
+                return [str(Item) for Item in Parsed]
+        except json.JSONDecodeError:
+            pass
+        Start = Cleaned.find("[")
+        End = Cleaned.rfind("]")
+        if Start != -1 and End != -1 and End > Start:
+            Candidate = Cleaned[Start:End + 1]
+            try:
+                Parsed = json.loads(Candidate)
+                if isinstance(Parsed, list):
+                    return [str(Item) for Item in Parsed]
+            except json.JSONDecodeError:
+                return None
+        return None
+
     try:
-        Content = GetOpenAiContent(
+        Content, ModelUsed = GetOpenAiContentWithModel(
             [
                 {"role": "system", "content": SystemPrompt},
                 {"role": "user", "content": UserPrompt}
@@ -489,17 +515,23 @@ Example for "veg":
             MaxTokens=300
         )
         
-        if not Content:
-            return []
-        
-        # Extract JSON from markdown code blocks if present
-        if "```json" in Content:
-            Content = Content.split("```json")[1].split("```")[0].strip()
-        elif "```" in Content:
-            Content = Content.split("```")[1].split("```")[0].strip()
-        
-        Suggestions = json.loads(Content)
-        
+        Suggestions = TryParseSuggestions(Content)
+        if Suggestions is None:
+            RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a formatter. Return ONLY a JSON array of strings. "
+                            "No extra text."
+                        )
+                    },
+                    {"role": "user", "content": Content}
+                ],
+                Temperature=0.1,
+                MaxTokens=200
+            )
+            Suggestions = TryParseSuggestions(RetryContent)
         if isinstance(Suggestions, list):
             return [str(S) for S in Suggestions[:Limit]]
         return []
