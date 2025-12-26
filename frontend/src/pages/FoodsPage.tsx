@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { GetFoods, CreateFood, UpdateFood, DeleteFood, GetMealTemplates, CreateMealTemplate, UpdateMealTemplate, DeleteMealTemplate, GetFoodSuggestions, LookupFoodOptionsByText, SearchFoodDatabases, GetProductDetails } from "../services/ApiClient";
+import { GetFoods, CreateFood, UpdateFood, DeleteFood, GetMealTemplates, CreateMealTemplate, UpdateMealTemplate, DeleteMealTemplate, GetFoodSuggestions, LookupFoodOptionsByText, SearchFoodDatabases } from "../services/ApiClient";
 import { Food, MealTemplateWithItems, MealType } from "../models/Models";
 
 const CommonServingUnits = [
@@ -234,14 +234,12 @@ export const FoodsPage = () => {
     
     try {
       const [SearchResults, AiOptions] = await Promise.all([
-        SearchOpenFoodFacts ? SearchFoodDatabases(NewFoodName, false) : Promise.resolve({ Openfoodfacts: [], AiFallbackAvailable: false }),
+        SearchOpenFoodFacts ? SearchFoodDatabases(NewFoodName) : Promise.resolve({ Openfoodfacts: [], AiFallbackAvailable: false }),
         SearchAI ? LookupFoodOptionsByText(NewFoodName) : Promise.resolve([])
       ]);
 
       const FilteredResults = {
         Openfoodfacts: SearchOpenFoodFacts ? SearchResults.Openfoodfacts : [],
-        Coles: [],
-        Woolworths: [],
         AiResults: SearchAI ? BuildAiResults(AiOptions as AiFoodOption[]) : [],
         AiFallbackAvailable: SearchAI && SearchResults.AiFallbackAvailable
       };
@@ -294,49 +292,12 @@ export const FoodsPage = () => {
     }
   };
 
-  const HandleSelectDatabaseResult = async (Result: any, Source: string) => {
+  const HandleSelectDatabaseResult = (Result: any, Source: string) => {
     SetSelectedSearchResult({ ...Result, Source });
     SetDatabaseSearchResults(null);
     SetDataSourceUsed(Source);
     
-    // Check if this requires detailed fetching (Coles products)
-    if (Result.Metadata?.requires_detail_fetch && Result.Metadata?.url) {
-      SetIsPopulatingFromAI(true); // Reuse loading state
-      try {
-        const DetailedResult = await GetProductDetails(Source, Result.Metadata.url);
-        
-        // Populate with detailed nutrition data
-        SetNewFoodName(DetailedResult.FoodName);
-        SetNewFoodCalories(DetailedResult.CaloriesPerServing ? String(DetailedResult.CaloriesPerServing) : "0");
-        SetNewFoodProtein(DetailedResult.ProteinPerServing ? String(DetailedResult.ProteinPerServing) : "0");
-        SetNewFoodFibre(DetailedResult.FiberPerServing ? String(DetailedResult.FiberPerServing) : "");
-        SetNewFoodCarbs(DetailedResult.CarbohydratesPerServing ? String(DetailedResult.CarbohydratesPerServing) : "");
-        SetNewFoodFat(DetailedResult.FatPerServing ? String(DetailedResult.FatPerServing) : "");
-        SetNewFoodSaturatedFat(DetailedResult.SaturatedFatPerServing ? String(DetailedResult.SaturatedFatPerServing) : "");
-        SetNewFoodSugar(DetailedResult.SugarPerServing ? String(DetailedResult.SugarPerServing) : "");
-        SetNewFoodSodium(DetailedResult.SodiumPerServing ? String(DetailedResult.SodiumPerServing) : "");
-        
-        // Parse serving description
-        const ServingMatch = DetailedResult.ServingDescription?.match(/^(\d+(?:\.\d+)?)\s*(.+)$/);
-        if (ServingMatch) {
-          SetNewFoodQuantity(ServingMatch[1]);
-          SetNewFoodUnit(ServingMatch[2]);
-        } else {
-          SetNewFoodQuantity("1");
-          SetNewFoodUnit(DetailedResult.ServingDescription || "serving");
-        }
-      } catch (Error) {
-        console.error("Failed to fetch product details:", Error);
-        SetErrorMessage("Failed to fetch detailed nutrition information");
-        // Fall back to basic info
-        PopulateBasicInfo(Result);
-      } finally {
-        SetIsPopulatingFromAI(false);
-      }
-    } else {
-      // No detailed fetch needed, populate directly
-      PopulateBasicInfo(Result);
-    }
+    PopulateBasicInfo(Result);
   };
   
   const PopulateBasicInfo = (Result: any) => {
@@ -694,22 +655,6 @@ export const FoodsPage = () => {
                       )}
                     </p>
                   )}
-                  {DataSourceUsed === 'coles' && (
-                    <p className="text-red-600 flex items-center gap-1">
-                      <img src="/source-icons/coles.png" alt="" className="w-3 h-3" />
-                      Nutrition from Coles
-                      {SelectedSearchResult?.Metadata?.url && (
-                        <a 
-                          href={SelectedSearchResult.Metadata.url} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="underline hover:text-red-700"
-                        >
-                          (view)
-                        </a>
-                      )}
-                    </p>
-                  )}
                   {DataSourceUsed === 'ai-generated' && (
                     <p className="text-purple-600 flex items-center gap-1">
                       <img src="/source-icons/openai.png" alt="" className="w-3 h-3" />
@@ -774,34 +719,6 @@ export const FoodsPage = () => {
                     >
                       <img src="/source-icons/calorieking.png" alt="" className="w-4 h-4" />
                       CalorieKing
-                    </button>
-                    <button
-                      type="button"
-                      className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-Ink/20 text-Ink rounded-lg hover:bg-Ink/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                      onClick={() => {
-                        if (NewFoodName) {
-                          window.open(`https://www.coles.com.au/search/products?q=${encodeURIComponent(NewFoodName)}`, '_blank');
-                        }
-                      }}
-                      disabled={!NewFoodName || NewFoodName.length < 3}
-                      title="Search Coles"
-                    >
-                      <img src="/source-icons/coles.png" alt="" className="w-4 h-4" />
-                      Coles
-                    </button>
-                    <button
-                      type="button"
-                      className="flex items-center justify-center gap-2 px-3 py-2 bg-white border border-Ink/20 text-Ink rounded-lg hover:bg-Ink/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
-                      onClick={() => {
-                        if (NewFoodName) {
-                          window.open(`https://www.woolworths.com.au/shop/search/products?searchTerm=${encodeURIComponent(NewFoodName)}`, '_blank');
-                        }
-                      }}
-                      disabled={!NewFoodName || NewFoodName.length < 3}
-                      title="Search Woolworths"
-                    >
-                      <img src="/source-icons/woolworths.png" alt="" className="w-4 h-4" />
-                      Woolworths
                     </button>
                     <button
                       type="button"
@@ -1396,34 +1313,6 @@ export const FoodsPage = () => {
                                   )}
                                   {Food.DataSource === "openfoodfacts" && !Food.Metadata?.url && (
                                     <img src="/source-icons/openfoodfacts.png" alt="OpenFoodFacts" className="w-4 h-4" title="From OpenFoodFacts" />
-                                  )}
-                                  {Food.DataSource === "coles" && Food.Metadata?.url && (
-                                    <a 
-                                      href={Food.Metadata.url} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      title="View on Coles"
-                                      className="hover:opacity-70 transition-opacity"
-                                    >
-                                      <img src="/source-icons/coles.png" alt="Coles" className="w-4 h-4" />
-                                    </a>
-                                  )}
-                                  {Food.DataSource === "coles" && !Food.Metadata?.url && (
-                                    <img src="/source-icons/coles.png" alt="Coles" className="w-4 h-4" title="From Coles" />
-                                  )}
-                                  {Food.DataSource === "woolworths" && Food.Metadata?.url && (
-                                    <a 
-                                      href={Food.Metadata.url} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      title="View on Woolworths"
-                                      className="hover:opacity-70 transition-opacity"
-                                    >
-                                      <img src="/source-icons/woolworths.png" alt="Woolworths" className="w-4 h-4" />
-                                    </a>
-                                  )}
-                                  {Food.DataSource === "woolworths" && !Food.Metadata?.url && (
-                                    <img src="/source-icons/woolworths.png" alt="Woolworths" className="w-4 h-4" title="From Woolworths" />
                                   )}
                                   {(Food.DataSource === "ai" || Food.DataSource === "ai-generated" || Food.DataSource === "ai-suggestion") && (
                                     <img src="/source-icons/openai.png" alt="AI Generated" className="w-4 h-4" title="AI Generated" />
