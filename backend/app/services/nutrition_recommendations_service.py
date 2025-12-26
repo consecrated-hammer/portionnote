@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Optional
 
 from app.config import Settings
-from app.services.openai_client import GetOpenAiContent
+from app.services.openai_client import GetOpenAiContentWithModel
 
 
 class NutritionRecommendation:
@@ -64,7 +64,7 @@ def GetAiNutritionRecommendations(
     HeightCm: int,
     WeightKg: float,
     ActivityLevel: str
-) -> NutritionRecommendation:
+) -> tuple[NutritionRecommendation, str]:
     """
     Get personalized nutrition recommendations from AI based on user profile.
     
@@ -117,7 +117,7 @@ Base your recommendations on:
 
 Provide personalized daily nutrition targets."""
 
-    Content = GetOpenAiContent(
+    Content, ModelUsed = GetOpenAiContentWithModel(
         [
             {"role": "system", "content": SystemPrompt},
             {"role": "user", "content": UserPrompt}
@@ -141,7 +141,7 @@ Provide personalized daily nutrition targets."""
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid AI response format: {e}")
 
-    return NutritionRecommendation(
+    Recommendation = NutritionRecommendation(
         DailyCalorieTarget=int(RecommendationData.get("DailyCalorieTarget", 2000)),
         ProteinTargetMin=float(RecommendationData.get("ProteinTargetMin", 60)),
         ProteinTargetMax=float(RecommendationData.get("ProteinTargetMax", 120)),
@@ -153,3 +153,4 @@ Provide personalized daily nutrition targets."""
         SodiumTarget=float(RecommendationData.get("SodiumTarget", 2300)) if RecommendationData.get("SodiumTarget") else None,
         Explanation=RecommendationData.get("Explanation", "Personalized recommendations based on your profile.")
     )
+    return Recommendation, ModelUsed

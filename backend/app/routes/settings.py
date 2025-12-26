@@ -52,7 +52,7 @@ async def GetAiRecommendations(CurrentUser: User = Depends(RequireUser)):
     
     try:
         Age = CalculateAge(CurrentUser.BirthDate)
-        Recommendation = GetAiNutritionRecommendations(
+        Recommendation, ModelUsed = GetAiNutritionRecommendations(
             Age=Age,
             HeightCm=CurrentUser.HeightCm,
             WeightKg=CurrentUser.WeightKg,
@@ -69,7 +69,9 @@ async def GetAiRecommendations(CurrentUser: User = Depends(RequireUser)):
             Recommendation=Recommendation
         )
         
-        return NutritionRecommendationResponse(**Recommendation.ToDict())
+        ResponseData = Recommendation.ToDict()
+        ResponseData["ModelUsed"] = ModelUsed
+        return NutritionRecommendationResponse(**ResponseData)
     except ValueError as ErrorValue:
         raise HTTPException(status_code=400, detail=str(ErrorValue)) from ErrorValue
     except Exception as ErrorValue:

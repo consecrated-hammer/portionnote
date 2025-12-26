@@ -50,8 +50,11 @@ def test_get_ai_nutrition_recommendations_success(monkeypatch):
 }
 ```"""
 
-    with patch("app.services.nutrition_recommendations_service.GetOpenAiContent", return_value=Content):
-        Result = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        return_value=(Content, "gpt-4.1")
+    ):
+        Result, ModelUsed = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
         assert isinstance(Result, NutritionRecommendation)
         assert Result.DailyCalorieTarget == 2500
@@ -64,6 +67,7 @@ def test_get_ai_nutrition_recommendations_success(monkeypatch):
         assert Result.SugarTarget == 50
         assert Result.SodiumTarget == 2300
         assert "moderately active lifestyle" in Result.Explanation
+        assert ModelUsed == "gpt-4.1"
 
 
 def test_get_ai_nutrition_recommendations_minimal(monkeypatch):
@@ -80,8 +84,11 @@ def test_get_ai_nutrition_recommendations_minimal(monkeypatch):
   "Explanation": "These targets support your maintenance needs with adequate protein."
 }"""
 
-    with patch("app.services.nutrition_recommendations_service.GetOpenAiContent", return_value=Content):
-        Result = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        return_value=(Content, "gpt-4o-mini")
+    ):
+        Result, ModelUsed = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
         assert isinstance(Result, NutritionRecommendation)
         assert Result.DailyCalorieTarget == 1600
@@ -90,6 +97,7 @@ def test_get_ai_nutrition_recommendations_minimal(monkeypatch):
         assert Result.FibreTarget is None
         assert Result.CarbsTarget is None
         assert Result.FatTarget is None
+        assert ModelUsed == "gpt-4o-mini"
 
 
 def test_get_ai_nutrition_recommendations_api_error(monkeypatch):
@@ -100,7 +108,7 @@ def test_get_ai_nutrition_recommendations_api_error(monkeypatch):
     ActivityLevel = "moderately_active"
 
     with patch(
-        "app.services.nutrition_recommendations_service.GetOpenAiContent",
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
         side_effect=Exception("OpenAI API error: 500")
     ):
         with pytest.raises(Exception) as ExcInfo:
@@ -118,7 +126,10 @@ def test_get_ai_nutrition_recommendations_invalid_response(monkeypatch):
 
     Content = "This is an invalid response without proper JSON."
 
-    with patch("app.services.nutrition_recommendations_service.GetOpenAiContent", return_value=Content):
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        return_value=(Content, "gpt-4.1")
+    ):
         with pytest.raises(ValueError) as ExcInfo:
             GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
@@ -144,9 +155,13 @@ def test_get_ai_nutrition_recommendations_extra_active(monkeypatch):
 }
 ```"""
 
-    with patch("app.services.nutrition_recommendations_service.GetOpenAiContent", return_value=Content):
-        Result = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        return_value=(Content, "gpt-4.1")
+    ):
+        Result, ModelUsed = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
         assert Result.DailyCalorieTarget >= 3000
         assert Result.ProteinTargetMin >= 130
         assert "activity level" in Result.Explanation.lower()
+        assert ModelUsed == "gpt-4.1"

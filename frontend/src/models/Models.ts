@@ -212,6 +212,7 @@ export type AiSuggestion = {
 
 export type AiSuggestionResponse = {
   Suggestions: AiSuggestion[];
+  ModelUsed?: string;
 };
 
 export type ScheduleSlot = {
@@ -250,4 +251,5 @@ export type NutritionRecommendation = {
   SugarTarget?: number;
   SodiumTarget?: number;
   Explanation: string;
+  ModelUsed?: string;
 };

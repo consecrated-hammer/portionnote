@@ -760,6 +760,9 @@ export const SettingsPage = ({ onLogout, CurrentUser }: SettingsPageProps) => {
               {/* Explanation */}
               <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-100">
                 <p className="text-sm text-Ink/80 leading-relaxed">{Recommendations.Explanation}</p>
+                {Recommendations.ModelUsed && (
+                  <p className="mt-2 text-xs text-Ink/60">Model used: {Recommendations.ModelUsed}</p>
+                )}
               </div>
 
               {/* Recommendations Grid */}

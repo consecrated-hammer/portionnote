@@ -73,7 +73,7 @@ def _ExtractOpenAiContent(Data: dict[str, Any]) -> str:
             for Content in ContentItems:
                 if not isinstance(Content, dict):
                     continue
-                TextValue = Content.get("text")
+                TextValue = Content.get("text") or Content.get("output_text")
                 if isinstance(TextValue, str) and TextValue:
                     TextParts.append(TextValue)
         Joined = "\n".join(TextParts).strip()
@@ -118,7 +118,7 @@ def _RequestOpenAiContent(
     Messages: list[dict[str, Any]],
     Temperature: float,
     MaxTokens: int | None
-) -> str:
+) -> tuple[str, str]:
     if not Settings.OpenAiApiKey:
         raise ValueError("OpenAI API key not configured.")
 
@@ -130,12 +130,15 @@ def _RequestOpenAiContent(
     if UseResponses:
         Payload: dict[str, Any] = {
             "model": Model,
-            "input": _BuildResponsesInput(Messages)
+            "input": _BuildResponsesInput(Messages),
+            "text": {"format": {"type": "text"}}
         }
         if SupportsTemperature:
             Payload["temperature"] = Temperature
         if MaxTokens is not None:
             Payload["max_output_tokens"] = MaxTokens
+        else:
+            Payload["max_output_tokens"] = 400
     else:
         Payload = {
             "model": Model,
@@ -169,10 +172,16 @@ def _RequestOpenAiContent(
             raise ValueError("OpenAI model unavailable.") from ErrorValue
         raise ValueError(f"OpenAI request failed ({Response.status_code}) at {Url}: {Detail}") from ErrorValue
     Data = Response.json()
-    return _ExtractOpenAiContent(Data)
+    Content = _ExtractOpenAiContent(Data)
+    ModelUsed = Data.get("model", Model)
+    return Content, str(ModelUsed)
 
 
-def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxTokens: int | None = None) -> str:
+def GetOpenAiContentWithModel(
+    Messages: list[dict[str, Any]],
+    Temperature: float,
+    MaxTokens: int | None = None
+) -> tuple[str, str]:
     ModelsToTry = [Settings.OpenAiModel]
     for Model in _ParseFallbackModels():
         if Model not in ModelsToTry:
@@ -190,3 +199,8 @@ def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxToke
     if LastError is not None:
         raise LastError
     raise ValueError("OpenAI request failed.")
+
+
+def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxTokens: int | None = None) -> str:
+    Content, _ModelUsed = GetOpenAiContentWithModel(Messages, Temperature, MaxTokens)
+    return Content

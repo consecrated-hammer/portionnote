@@ -72,15 +72,17 @@ def test_get_ai_suggestions_success(monkeypatch, test_user_id):
     )
 
     monkeypatch.setattr(
-        "app.services.ai_suggestions_service.GetOpenAiContent",
-        lambda *_args, **_kwargs: json.dumps([
-            {"Title": "Add protein", "Detail": "Aim for 20g at breakfast."}
-        ])
+        "app.services.ai_suggestions_service.GetOpenAiContentWithModel",
+        lambda *_args, **_kwargs: (
+            json.dumps([{"Title": "Add protein", "Detail": "Aim for 20g at breakfast."}]),
+            "gpt-4.1"
+        )
     )
 
     try:
-        Suggestions = GetAiSuggestions(test_user_id, "2024-01-02")
+        Suggestions, ModelUsed = GetAiSuggestions(test_user_id, "2024-01-02")
         assert Suggestions[0].SuggestionType == "AiSuggestion"
+        assert ModelUsed == "gpt-4.1"
     finally:
         Settings.OpenAiApiKey = OriginalKey
         Settings.OpenAiModel = OriginalModel

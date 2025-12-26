@@ -224,6 +224,7 @@ class Suggestion(BaseModel):
 
 class SuggestionsResponse(BaseModel):
     Suggestions: list[Suggestion]
+    ModelUsed: Optional[str] = None
 
 
 class DailyLogWithEntries(BaseModel):
@@ -418,6 +419,7 @@ class NutritionRecommendationResponse(BaseModel):
     SugarTarget: Optional[float] = None
     SodiumTarget: Optional[float] = None
     Explanation: str
+    ModelUsed: Optional[str] = None
 
 
 class RecommendationLog(BaseModel):
