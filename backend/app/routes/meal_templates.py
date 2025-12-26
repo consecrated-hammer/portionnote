@@ -9,6 +9,8 @@ from app.models.schemas import (
     UpdateMealTemplateInput,
     MealTemplateListResponse,
     MealTemplateWithItems,
+    MealTextParseInput,
+    MealTextParseResponse,
     User
 )
 from app.services.meal_templates_service import (
@@ -18,6 +20,7 @@ from app.services.meal_templates_service import (
     UpdateMealTemplate,
     GetMealTemplates
 )
+from app.services.meal_text_parse_service import ParseMealText
 
 MealTemplateRouter = APIRouter()
 
@@ -31,6 +34,17 @@ class MealTemplateResponse(BaseModel):
 async def ListMealTemplates(CurrentUser: User = Depends(RequireUser)):
     Templates = GetMealTemplates(CurrentUser.UserId)
     return MealTemplateListResponse(Templates=Templates)
+
+
+@MealTemplateRouter.post("/ai-parse", response_model=MealTextParseResponse, tags=["MealTemplates"])
+async def ParseMealTextRoute(Input: MealTextParseInput, CurrentUser: User = Depends(RequireUser)):
+    try:
+        Items = ParseMealText(Input.Text, Input.KnownFoods)
+        return MealTextParseResponse(Items=Items)
+    except ValueError as ErrorValue:
+        raise HTTPException(status_code=400, detail=str(ErrorValue)) from ErrorValue
+    except Exception as ErrorValue:
+        raise HTTPException(status_code=500, detail="Failed to parse meal entry.") from ErrorValue
 
 
 @MealTemplateRouter.post("", response_model=MealTemplateResponse, status_code=201, tags=["MealTemplates"])

@@ -206,6 +206,16 @@ export type MealTemplateListResponse = {
   Templates: MealTemplateWithItems[];
 };
 
+export type MealTextParseItem = {
+  FoodName: string;
+  Quantity: number;
+  Unit: string;
+};
+
+export type MealTextParseResponse = {
+  Items: MealTextParseItem[];
+};
+
 export type AiSuggestion = {
   SuggestionType: string;
   Title: string;

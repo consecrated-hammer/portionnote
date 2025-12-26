@@ -11,6 +11,7 @@ import {
   LoginInput,
   MealTemplateListResponse,
   MealTemplateWithItems,
+  MealTextParseResponse,
   MealEntryWithFood,
   MealType,
   NutritionRecommendation,
@@ -313,6 +314,14 @@ export const UpdateMealTemplate = async (MealTemplateId: string, Input: {
 }): Promise<MealTemplateWithItems> => {
   const Response = await ApiClient.patch(`/api/meal-templates/${MealTemplateId}`, Input);
   return Response.data.Template as MealTemplateWithItems;
+};
+
+export const ParseMealText = async (Text: string, KnownFoods: string[] = []): Promise<MealTextParseResponse> => {
+  const Response = await ApiClient.post("/api/meal-templates/ai-parse", {
+    Text,
+    KnownFoods
+  });
+  return Response.data as MealTextParseResponse;
 };
 export const GetDailyLog = async (LogDate: string): Promise<DailyLogResponse> => {
   const Response = await ApiClient.get(`/api/daily-logs/${LogDate}`);

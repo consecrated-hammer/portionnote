@@ -384,6 +384,21 @@ class MealTemplateListResponse(BaseModel):
     Templates: list[MealTemplateWithItems]
 
 
+class MealTextParseItem(BaseModel):
+    FoodName: str
+    Quantity: float
+    Unit: str
+
+
+class MealTextParseInput(BaseModel):
+    Text: str = Field(min_length=1)
+    KnownFoods: Optional[list[str]] = None
+
+
+class MealTextParseResponse(BaseModel):
+    Items: list[MealTextParseItem]
+
+
 class MealTemplateItemInput(BaseModel):
     FoodId: str
     MealType: MealType

@@ -1,7 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { GetFoods, CreateFood, UpdateFood, DeleteFood, GetMealTemplates, CreateMealTemplate, UpdateMealTemplate, DeleteMealTemplate, GetFoodSuggestions, LookupFoodOptionsByText, SearchFoodDatabases } from "../services/ApiClient";
+import { GetFoods, CreateFood, UpdateFood, DeleteFood, GetMealTemplates, CreateMealTemplate, UpdateMealTemplate, DeleteMealTemplate, GetFoodSuggestions, LookupFoodOptionsByText, SearchFoodDatabases, ParseMealText } from "../services/ApiClient";
 import { Food, MealTemplateWithItems, MealType } from "../models/Models";
 import { UseAuth } from "../contexts/AuthContext";
 
@@ -12,7 +12,11 @@ const CommonServingUnits = [
 const MealEntryUnitOptions = [
   "serving",
   "g",
+  "kg",
+  "oz",
+  "lb",
   "mL",
+  "L",
   "tsp",
   "tbsp",
   "cup",
@@ -36,6 +40,13 @@ type AiFoodOption = {
   SodiumPerServing?: number | null;
   Source: string;
   Confidence: string;
+};
+
+type AiMealItem = {
+  FoodName: string;
+  Quantity: number;
+  Unit: string;
+  MatchedFoodId?: string;
 };
 
 export const FoodsPage = () => {
@@ -90,6 +101,11 @@ export const FoodsPage = () => {
   const [SearchOpenFoodFacts, SetSearchOpenFoodFacts] = useState(true);
   const [SearchAI, SetSearchAI] = useState(true);
   const [DataSourceUsed, SetDataSourceUsed] = useState<string | null>(null);
+  const [ShowAiMealEntry, SetShowAiMealEntry] = useState(false);
+  const [AiMealText, SetAiMealText] = useState("");
+  const [AiMealItems, SetAiMealItems] = useState<AiMealItem[]>([]);
+  const [AiMealError, SetAiMealError] = useState<string | null>(null);
+  const [IsParsingAiMeal, SetIsParsingAiMeal] = useState(false);
 
   // Modal editing states
   const [EditingFood, SetEditingFood] = useState<Food | null>(null);
@@ -112,8 +128,6 @@ export const FoodsPage = () => {
 
   const RadiusPx = 60;
 
-  const GetMealEntryDefaults = () => ({ EntryQuantity: "1", EntryUnit: "serving" });
-
   const NormalizeMealUnit = (Unit: string) => {
     const Value = Unit.trim().toLowerCase();
     if (Value === "ml") return "ml";
@@ -121,6 +135,66 @@ export const FoodsPage = () => {
     if (Value === "servings") return "serving";
     if (Value.endsWith("s") && Value.length > 1) return Value.slice(0, -1);
     return Value;
+  };
+
+  const NormalizeMealEntryUnit = (Unit: string) => {
+    const Value = NormalizeMealUnit(Unit);
+    if (Value === "ml") return "mL";
+    if (Value === "l") return "L";
+    return Value || "serving";
+  };
+
+  const GetMealEntryDefaults = (FoodItem?: Food) => {
+    if (!FoodItem) {
+      return { EntryQuantity: "1", EntryUnit: "serving" };
+    }
+    const QuantityValue = FoodItem.ServingQuantity > 0 ? FoodItem.ServingQuantity : 1;
+    const UnitValue = FoodItem.ServingUnit?.trim() ? FoodItem.ServingUnit : "serving";
+    return { EntryQuantity: String(QuantityValue), EntryUnit: UnitValue };
+  };
+
+  const GetMealEntryUnitOptions = (FoodItem: Food, CurrentUnit?: string) => {
+    const ServingUnit = NormalizeMealUnit(FoodItem.ServingUnit);
+    const LowerVolume = ["ml", "l", "tsp", "tbsp", "cup"];
+    const LowerMass = ["g", "kg", "oz", "lb"];
+    const LowerCount = ["piece", "slice", "biscuit", "handful"];
+
+    const Ordered: string[] = ["serving"];
+    if (LowerVolume.includes(ServingUnit)) {
+      Ordered.push("mL", "L", "tsp", "tbsp", "cup");
+      Ordered.push("piece", "slice", "biscuit", "handful");
+      Ordered.push("g", "kg", "oz", "lb");
+    } else if (LowerMass.includes(ServingUnit)) {
+      Ordered.push("g", "kg", "oz", "lb");
+      Ordered.push("piece", "slice", "biscuit", "handful");
+      Ordered.push("mL", "L", "tsp", "tbsp", "cup");
+    } else if (LowerCount.includes(ServingUnit)) {
+      Ordered.push("piece", "slice", "biscuit", "handful");
+      Ordered.push("mL", "L", "tsp", "tbsp", "cup");
+      Ordered.push("g", "kg", "oz", "lb");
+    } else {
+      Ordered.push(...MealEntryUnitOptions.filter((Unit) => Unit !== "serving"));
+    }
+    if (CurrentUnit) {
+      const NormalizedCurrent = NormalizeMealEntryUnit(CurrentUnit);
+      if (NormalizedCurrent && !Ordered.includes(NormalizedCurrent)) {
+        Ordered.unshift(NormalizedCurrent);
+      }
+    }
+    return Array.from(new Set(Ordered));
+  };
+
+  const NormalizeFoodName = (Value: string) => Value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+  const FindFoodMatch = (Name: string) => {
+    const Normalized = NormalizeFoodName(Name);
+    if (!Normalized) return null;
+    const Exact = Foods.find((FoodItem) => NormalizeFoodName(FoodItem.FoodName) === Normalized);
+    if (Exact) return Exact;
+    const Included = Foods.find((FoodItem) => NormalizeFoodName(FoodItem.FoodName).includes(Normalized));
+    if (Included) return Included;
+    const ReverseIncluded = Foods.find((FoodItem) => Normalized.includes(NormalizeFoodName(FoodItem.FoodName)));
+    return ReverseIncluded ?? null;
   };
 
   const GetPreviewServings = (FoodItem: Food, EntryQty: number, EntryUnit: string) => {
@@ -438,7 +512,7 @@ export const FoodsPage = () => {
         SetSelectedFoodIds(prev => new Set([...prev, NewFood.FoodId]));
         SetSelectedMealItems(prev => ({
           ...prev,
-          [NewFood.FoodId]: GetMealEntryDefaults()
+          [NewFood.FoodId]: GetMealEntryDefaults(NewFood)
         }));
       }
     } catch (ErrorValue) {
@@ -521,7 +595,8 @@ export const FoodsPage = () => {
 
     try {
       const Items = Array.from(SelectedFoodIds).map((FoodId, Index) => {
-        const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults();
+        const FoodItem = Foods.find((Item) => Item.FoodId === FoodId);
+        const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults(FoodItem);
         const EntryQuantityValue = Number(Entry.EntryQuantity);
         if (!Number.isFinite(EntryQuantityValue) || EntryQuantityValue <= 0) {
           throw new Error("Entry quantity must be greater than zero.");
@@ -531,7 +606,7 @@ export const FoodsPage = () => {
           MealType: "Breakfast" as MealType,
           Quantity: EntryQuantityValue,
           EntryQuantity: EntryQuantityValue,
-          EntryUnit: Entry.EntryUnit.trim() || "serving",
+          EntryUnit: NormalizeMealEntryUnit(Entry.EntryUnit),
           EntryNotes: null,
           SortOrder: Index
         };
@@ -554,9 +629,17 @@ export const FoodsPage = () => {
       SetSelectedMealItems({});
       SetIsAddingMeal(false);
       SetEditingMealId(null);
+      SetShowAiMealEntry(false);
+      SetAiMealText("");
+      SetAiMealItems([]);
+      SetAiMealError(null);
       await LoadFoods();
     } catch (ErrorValue) {
-      SetErrorMessage(EditingMealId ? "Failed to update meal" : "Failed to create meal");
+      if (ErrorValue instanceof Error && ErrorValue.message) {
+        SetErrorMessage(ErrorValue.message);
+      } else {
+        SetErrorMessage(EditingMealId ? "Failed to update meal" : "Failed to create meal");
+      }
     } finally {
       SetIsSaving(false);
     }
@@ -601,12 +684,65 @@ export const FoodsPage = () => {
       });
     } else {
       NewSelection.add(FoodId);
+      const FoodItem = Foods.find((Item) => Item.FoodId === FoodId);
       SetSelectedMealItems((Prev) => ({
         ...Prev,
-        [FoodId]: Prev[FoodId] ?? GetMealEntryDefaults()
+        [FoodId]: Prev[FoodId] ?? GetMealEntryDefaults(FoodItem)
       }));
     }
     SetSelectedFoodIds(NewSelection);
+  };
+
+  const HandleParseAiMeal = async () => {
+    if (!AiMealText.trim()) {
+      SetAiMealError("Enter a meal description to parse.");
+      return;
+    }
+    SetAiMealError(null);
+    SetIsParsingAiMeal(true);
+    try {
+      const KnownFoods = Foods.map((FoodItem) => FoodItem.FoodName).slice(0, 200);
+      const Response = await ParseMealText(AiMealText.trim(), KnownFoods);
+      const ParsedItems = (Response.Items || []).map((Item) => {
+        const Matched = FindFoodMatch(Item.FoodName);
+        const Quantity = Number(Item.Quantity);
+        return {
+          FoodName: Item.FoodName,
+          Quantity: Number.isFinite(Quantity) && Quantity > 0 ? Quantity : 1,
+          Unit: NormalizeMealEntryUnit(Item.Unit || "serving"),
+          MatchedFoodId: Matched?.FoodId
+        };
+      });
+      if (ParsedItems.length === 0) {
+        SetAiMealError("No items were parsed from that entry.");
+      }
+      SetAiMealItems(ParsedItems);
+    } catch (ErrorValue) {
+      SetAiMealError("AI entry parsing failed. Try a shorter description.");
+    } finally {
+      SetIsParsingAiMeal(false);
+    }
+  };
+
+  const HandleApplyAiMealItems = () => {
+    const Missing = AiMealItems.filter((Item) => !Item.MatchedFoodId);
+    if (Missing.length > 0) {
+      SetAiMealError("Select a food match for each item before applying.");
+      return;
+    }
+    const NextSelected = new Set(SelectedFoodIds);
+    const NextItems = { ...SelectedMealItems };
+    AiMealItems.forEach((Item) => {
+      if (!Item.MatchedFoodId) return;
+      NextSelected.add(Item.MatchedFoodId);
+      NextItems[Item.MatchedFoodId] = {
+        EntryQuantity: String(Item.Quantity),
+        EntryUnit: Item.Unit
+      };
+    });
+    SetSelectedFoodIds(NextSelected);
+    SetSelectedMealItems(NextItems);
+    SetAiMealError(null);
   };
 
   if (IsLoading) {
@@ -1167,13 +1303,22 @@ export const FoodsPage = () => {
                   + Quick add food
                 </button>
               </div>
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  className="text-xs text-Ink/70 hover:text-Ink font-medium"
+                  onClick={() => SetShowAiMealEntry((Prev) => !Prev)}
+                >
+                  {ShowAiMealEntry ? "Hide AI entry" : "Use AI entry"}
+                </button>
+              </div>
               {SelectedFoodIds.size > 0 && (() => {
                 const Totals = Array.from(SelectedFoodIds).reduce((Acc, FoodId) => {
                   const FoodItem = Foods.find(F => F.FoodId === FoodId);
                   if (!FoodItem) {
                     return Acc;
                   }
-                  const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults();
+                  const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults(FoodItem);
                   const EntryQuantityValue = Number(Entry.EntryQuantity);
                   const PreviewServings = Number.isFinite(EntryQuantityValue)
                     ? GetPreviewServings(FoodItem, EntryQuantityValue, Entry.EntryUnit)
@@ -1206,6 +1351,90 @@ export const FoodsPage = () => {
               </p>
             </div>
 
+            {ShowAiMealEntry && (
+              <div className="space-y-2 rounded-lg border border-purple-100 bg-white p-3">
+                <label className="text-sm font-medium text-Ink/70">AI meal entry</label>
+                <textarea
+                  className="InputField min-h-[110px]"
+                  value={AiMealText}
+                  onChange={(Event) => SetAiMealText(Event.target.value)}
+                  placeholder="breakfast, 3 weet-bix, 125 mL lite milk, half a teaspoon sugar"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="PillButton"
+                    onClick={HandleParseAiMeal}
+                    disabled={IsParsingAiMeal}
+                  >
+                    {IsParsingAiMeal ? "Parsing..." : "Parse with AI"}
+                  </button>
+                  <button
+                    type="button"
+                    className="OutlineButton"
+                    onClick={() => {
+                      SetAiMealText("");
+                      SetAiMealItems([]);
+                      SetAiMealError(null);
+                    }}
+                    disabled={IsParsingAiMeal}
+                  >
+                    Clear
+                  </button>
+                </div>
+                {AiMealError && (
+                  <p className="text-xs text-red-600">{AiMealError}</p>
+                )}
+                {AiMealItems.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs text-Ink/60">AI parsed items</p>
+                    {AiMealItems.map((Item, Index) => (
+                      <div key={`${Item.FoodName}-${Index}`} className="grid gap-2 sm:grid-cols-[1fr,1fr,120px]">
+                        <div className="text-sm text-Ink">
+                          {Item.FoodName} ({Item.Quantity} {Item.Unit})
+                        </div>
+                        <select
+                          className="InputField"
+                          value={Item.MatchedFoodId ?? ""}
+                          onChange={(Event) => {
+                            const Value = Event.target.value || undefined;
+                            SetAiMealItems((Prev) => Prev.map((Row, RowIndex) => (
+                              RowIndex === Index ? { ...Row, MatchedFoodId: Value } : Row
+                            )));
+                          }}
+                        >
+                          <option value="">Match to food</option>
+                          {Foods.map((FoodItem) => (
+                            <option key={FoodItem.FoodId} value={FoodItem.FoodId}>
+                              {FoodItem.FoodName}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="OutlineButton"
+                          onClick={() => {
+                            SetAiMealItems((Prev) => Prev.filter((_, RowIndex) => RowIndex !== Index));
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="PillButton"
+                        onClick={HandleApplyAiMealItems}
+                      >
+                        Apply items
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {SelectedFoodIds.size > 0 && (
               <div className="space-y-3">
                 <p className="text-xs font-medium text-Ink/70">Amounts per selected food</p>
@@ -1213,14 +1442,25 @@ export const FoodsPage = () => {
                   {Array.from(SelectedFoodIds).map((FoodId) => {
                     const FoodItem = Foods.find((F) => F.FoodId === FoodId);
                     if (!FoodItem) return null;
-                    const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults();
+                    const Entry = SelectedMealItems[FoodId] ?? GetMealEntryDefaults(FoodItem);
                     return (
                       <div key={FoodId} className="grid gap-2 rounded-lg bg-white border border-purple-100 p-2 sm:grid-cols-[1fr,140px,160px]">
-                        <div>
-                          <div className="text-sm font-medium text-Ink">{FoodItem.FoodName}</div>
-                          <div className="text-xs text-Ink/60">
-                            Serving: {FoodItem.ServingQuantity} {FoodItem.ServingUnit}
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-medium text-Ink">{FoodItem.FoodName}</div>
+                            <div className="text-xs text-Ink/60">
+                              Serving: {FoodItem.ServingQuantity} {FoodItem.ServingUnit}
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            className="text-Ink/40 hover:text-Ink"
+                            onClick={() => HandleToggleFoodSelection(FoodId)}
+                            aria-label={`Remove ${FoodItem.FoodName}`}
+                            title="Remove item"
+                          >
+                            <span className="material-icons text-sm">close</span>
+                          </button>
                         </div>
                         <input
                           className="InputField"
@@ -1236,9 +1476,8 @@ export const FoodsPage = () => {
                             }));
                           }}
                         />
-                        <input
+                        <select
                           className="InputField"
-                          list="meal-entry-unit-options"
                           value={Entry.EntryUnit}
                           onChange={(Event) => {
                             const Value = Event.target.value;
@@ -1247,17 +1486,17 @@ export const FoodsPage = () => {
                               [FoodId]: { ...Entry, EntryUnit: Value }
                             }));
                           }}
-                          placeholder="Unit"
-                        />
+                        >
+                          {GetMealEntryUnitOptions(FoodItem, Entry.EntryUnit).map((Unit) => (
+                            <option key={Unit} value={Unit}>
+                              {Unit}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     );
                   })}
                 </div>
-                <datalist id="meal-entry-unit-options">
-                  {MealEntryUnitOptions.map((Unit) => (
-                    <option key={Unit} value={Unit} />
-                  ))}
-                </datalist>
               </div>
             )}
 
@@ -1271,6 +1510,10 @@ export const FoodsPage = () => {
                   SetNewMealName("");
                   SetSelectedFoodIds(new Set());
                   SetSelectedMealItems({});
+                  SetShowAiMealEntry(false);
+                  SetAiMealText("");
+                  SetAiMealItems([]);
+                  SetAiMealError(null);
                 }}
                 disabled={IsSaving}
               >
@@ -1374,7 +1617,7 @@ export const FoodsPage = () => {
                               SetSelectedFoodIds(new Set(Foods.map(F => F.FoodId)));
                               const NextItems: Record<string, { EntryQuantity: string; EntryUnit: string }> = {};
                               Foods.forEach((FoodItem) => {
-                                NextItems[FoodItem.FoodId] = SelectedMealItems[FoodItem.FoodId] ?? GetMealEntryDefaults();
+                                NextItems[FoodItem.FoodId] = SelectedMealItems[FoodItem.FoodId] ?? GetMealEntryDefaults(FoodItem);
                               });
                               SetSelectedMealItems(NextItems);
                             } else {
