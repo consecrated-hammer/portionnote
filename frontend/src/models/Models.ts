@@ -189,6 +189,8 @@ export type MealTemplateItem = {
   FoodId: string;
   MealType: MealType;
   Quantity: number;
+  EntryQuantity?: number;
+  EntryUnit?: string;
   EntryNotes?: string | null;
   SortOrder: number;
   FoodName: string;

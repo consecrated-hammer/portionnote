@@ -286,6 +286,8 @@ export const CreateMealTemplate = async (Input: {
     FoodId: string;
     MealType: MealType;
     Quantity: number;
+    EntryQuantity?: number;
+    EntryUnit?: string;
     EntryNotes?: string | null;
     SortOrder: number;
   }>;
@@ -303,6 +305,8 @@ export const UpdateMealTemplate = async (MealTemplateId: string, Input: {
     FoodId: string;
     MealType: MealType;
     Quantity: number;
+    EntryQuantity?: number;
+    EntryUnit?: string;
     EntryNotes?: string | null;
     SortOrder: number;
   }>;

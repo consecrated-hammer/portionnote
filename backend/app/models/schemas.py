@@ -367,6 +367,8 @@ class MealTemplateItem(BaseModel):
     FoodId: str
     MealType: MealType
     Quantity: float
+    EntryQuantity: Optional[float] = None
+    EntryUnit: Optional[str] = None
     EntryNotes: Optional[str] = None
     SortOrder: int
     FoodName: str
@@ -386,6 +388,8 @@ class MealTemplateItemInput(BaseModel):
     FoodId: str
     MealType: MealType
     Quantity: float = Field(gt=0)
+    EntryQuantity: Optional[float] = Field(default=None, gt=0)
+    EntryUnit: Optional[str] = Field(default=None, min_length=1)
     EntryNotes: Optional[str] = None
     SortOrder: int = 0
 
