@@ -146,6 +146,7 @@ async def GlobalExceptionHandler(Request: Request, Exc: Exception):
 
 # Static file serving for SPA
 StaticDir = Path(__file__).parent / "static"
+ResolvedStaticDir = StaticDir.resolve()
 if StaticDir.exists():
     # Mount assets directory
     AssetsDir = StaticDir / "assets"
@@ -160,9 +161,9 @@ if StaticDir.exists():
     # SPA routing fallback - only matches GET requests for non-API, non-asset paths
     @App.get("/{full_path:path}", response_class=FileResponse, include_in_schema=False)
     async def ServeSPA(full_path: str):
-        # Try to serve actual file first
-        FilePath = StaticDir / full_path
-        if FilePath.is_file():
+        # Try to serve actual file first, but only within StaticDir.
+        FilePath = (StaticDir / full_path).resolve()
+        if FilePath.is_relative_to(ResolvedStaticDir) and FilePath.is_file():
             return FileResponse(str(FilePath))
         # Otherwise serve index.html for SPA routing
         return FileResponse(str(StaticDir / "index.html"))

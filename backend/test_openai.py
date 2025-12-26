@@ -7,7 +7,7 @@ if not api_key:
     raise SystemExit("OPENAI_API_KEY is not set. Add it to your .env before running this test.")
 
 print("Testing OpenAI API connection...")
-print(f"Using API key: {api_key[:20]}...{api_key[-10:]}")
+print("Using API key: [set]")
 
 try:
     response = httpx.post(
