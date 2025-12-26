@@ -1,0 +1,23 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /
+    container_name: portionnote-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      API_PORT: 8001
+      WEB_ORIGIN: http://localhost:8001
+      DATABASE_FILE: /data/portionnote.sqlite
+      ENVIRONMENT: development
+    ports:
+      - "8001:8001"
+    volumes:
+      - portionnote-data:/data
+
+volumes:
+  portionnote-data:
+    driver: local
