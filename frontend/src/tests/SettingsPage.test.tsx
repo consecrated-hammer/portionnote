@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { SettingsPage } from "../pages/SettingsPage";
 import { GetScheduleSlots, GetUserSettings } from "../services/ApiClient";
@@ -26,16 +27,18 @@ it("renders settings controls", async () => {
   vi.mocked(GetScheduleSlots).mockResolvedValue([]);
 
   render(
-    <SettingsPage
-      onLogout={() => {}}
-      CurrentUser={{
-        UserId: "User-1",
-        Email: "admin@gmail.com",
-        FirstName: "Admin",
-        LastName: "User",
-        IsAdmin: true
-      }}
-    />
+    <MemoryRouter>
+      <SettingsPage
+        onLogout={() => {}}
+        CurrentUser={{
+          UserId: "User-1",
+          Email: "admin@gmail.com",
+          FirstName: "Admin",
+          LastName: "User",
+          IsAdmin: true
+        }}
+      />
+    </MemoryRouter>
   );
 
   expect(await screen.findByText("Settings")).toBeInTheDocument();
