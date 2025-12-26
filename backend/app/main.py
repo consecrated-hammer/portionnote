@@ -146,13 +146,26 @@ async def GlobalExceptionHandler(Request: Request, Exc: Exception):
 
 # Static file serving for SPA
 StaticDir = Path(__file__).parent / "static"
-ResolvedStaticDir = StaticDir.resolve()
 if StaticDir.exists():
     # Mount assets directory
     AssetsDir = StaticDir / "assets"
     if AssetsDir.exists():
         App.mount("/assets", StaticFiles(directory=str(AssetsDir)), name="assets")
-    
+
+    ImagesDir = StaticDir / "images"
+    if ImagesDir.exists():
+        App.mount("/images", StaticFiles(directory=str(ImagesDir)), name="images")
+
+    SourceIconsDir = StaticDir / "source-icons"
+    if SourceIconsDir.exists():
+        App.mount("/source-icons", StaticFiles(directory=str(SourceIconsDir)), name="source-icons")
+
+    FaviconPath = StaticDir / "favicon.svg"
+    if FaviconPath.exists():
+        @App.get("/favicon.svg", response_class=FileResponse, include_in_schema=False)
+        async def ServeFavicon():
+            return FileResponse(str(FaviconPath))
+
     # Serve index.html at root
     @App.get("/", response_class=FileResponse, include_in_schema=False)
     async def ServeRoot():
@@ -161,11 +174,6 @@ if StaticDir.exists():
     # SPA routing fallback - only matches GET requests for non-API, non-asset paths
     @App.get("/{full_path:path}", response_class=FileResponse, include_in_schema=False)
     async def ServeSPA(full_path: str):
-        # Try to serve actual file first, but only within StaticDir.
-        FilePath = (StaticDir / full_path).resolve()
-        if FilePath.is_relative_to(ResolvedStaticDir) and FilePath.is_file():
-            return FileResponse(str(FilePath))
-        # Otherwise serve index.html for SPA routing
         return FileResponse(str(StaticDir / "index.html"))
 else:
     @App.get("/", include_in_schema=False)
