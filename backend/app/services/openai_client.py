@@ -202,6 +202,15 @@ def GetOpenAiContentWithModel(
     raise ValueError("OpenAI request failed.")
 
 
+def GetOpenAiContentForModel(
+    Model: str,
+    Messages: list[dict[str, Any]],
+    Temperature: float,
+    MaxTokens: int | None = None
+) -> tuple[str, str]:
+    return _RequestOpenAiContent(Model, Messages, Temperature, MaxTokens)
+
+
 def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxTokens: int | None = None) -> str:
     Content, _ModelUsed = GetOpenAiContentWithModel(Messages, Temperature, MaxTokens)
     return Content

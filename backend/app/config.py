@@ -28,6 +28,10 @@ class AppSettings(BaseSettings):
         default="gpt-4.1,gpt-4o-mini",
         alias="OPENAI_FALLBACK_MODELS"
     )
+    OpenAiAutosuggestModel: str = Field(
+        default="gpt-4o-mini",
+        alias="OPENAI_AUTOSUGGEST_MODEL"
+    )
     OpenAiBaseUrl: str = Field(
         default="https://api.openai.com/v1/chat/completions",
         alias="OPENAI_BASE_URL"

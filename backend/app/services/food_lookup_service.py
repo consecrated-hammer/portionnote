@@ -9,7 +9,11 @@ from typing import Optional
 import httpx
 
 from app.config import Settings
-from app.services.openai_client import GetOpenAiContentWithModel
+from app.services.openai_client import (
+    GetOpenAiContent,
+    GetOpenAiContentForModel,
+    GetOpenAiContentWithModel
+)
 from app.utils.logger import GetLogger
 
 Logger = GetLogger("food_lookup_service")
@@ -78,6 +82,21 @@ def ParseLookupJson(Content: str) -> object:
     try:
         return json.loads(Content)
     except json.JSONDecodeError as ErrorValue:
+        Cleaned = Content.strip()
+        ListStart = Cleaned.find("[")
+        ListEnd = Cleaned.rfind("]")
+        ObjStart = Cleaned.find("{")
+        ObjEnd = Cleaned.rfind("}")
+        Candidate = ""
+        if ListStart != -1 and ListEnd != -1 and ListEnd > ListStart:
+            Candidate = Cleaned[ListStart:ListEnd + 1]
+        elif ObjStart != -1 and ObjEnd != -1 and ObjEnd > ObjStart:
+            Candidate = Cleaned[ObjStart:ObjEnd + 1]
+        if Candidate:
+            try:
+                return json.loads(Candidate)
+            except json.JSONDecodeError:
+                pass
         raise ValueError(f"Invalid AI response format: {ErrorValue}") from ErrorValue
 
 
@@ -229,6 +248,22 @@ When size variants exist for menu items or branded meals, include small, medium,
         MaxTokens=700
     )
     FoodData = ParseLookupJson(Content)
+    if not isinstance(FoodData, (dict, list)):
+        RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a formatter. Return ONLY a JSON array of 1-3 objects "
+                        "with the required fields. No extra text."
+                    )
+                },
+                {"role": "user", "content": Content}
+            ],
+            Temperature=0.1,
+            MaxTokens=400
+        )
+        FoodData = ParseLookupJson(RetryContent)
 
     if isinstance(FoodData, dict):
         FoodData = [FoodData]
@@ -506,15 +541,27 @@ Example for "veg":
         return None
 
     try:
-        Content, ModelUsed = GetOpenAiContentWithModel(
-            [
-                {"role": "system", "content": SystemPrompt},
-                {"role": "user", "content": UserPrompt}
-            ],
-            Temperature=0.5,
-            MaxTokens=300
-        )
-        
+        AutosuggestModel = Settings.OpenAiAutosuggestModel or "gpt-4o-mini"
+        try:
+            Content, _ModelUsed = GetOpenAiContentForModel(
+                AutosuggestModel,
+                [
+                    {"role": "system", "content": SystemPrompt},
+                    {"role": "user", "content": UserPrompt}
+                ],
+                Temperature=0.4,
+                MaxTokens=200
+            )
+        except Exception:
+            Content, _ModelUsed = GetOpenAiContentWithModel(
+                [
+                    {"role": "system", "content": SystemPrompt},
+                    {"role": "user", "content": UserPrompt}
+                ],
+                Temperature=0.4,
+                MaxTokens=200
+            )
+
         Suggestions = TryParseSuggestions(Content)
         if Suggestions is None:
             RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
@@ -535,9 +582,6 @@ Example for "veg":
         if isinstance(Suggestions, list):
             return [str(S) for S in Suggestions[:Limit]]
         return []
-        
     except Exception as Error:
         Logger.error(f"Error during food search autocomplete: {Error}", exc_info=True)
         return []
-    except Exception:
-        return None
