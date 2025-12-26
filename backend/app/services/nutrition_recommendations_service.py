@@ -151,11 +151,22 @@ Provide personalized daily nutrition targets."""
             {"role": "user", "content": UserPrompt}
         ],
         Temperature=0.3,
-        MaxTokens=600
+        MaxTokens=900
     )
     
     if not Content:
-        raise ValueError("No response from AI.")
+        RetryContent, RetryModelUsed = GetOpenAiContentWithModel(
+            [
+                {"role": "system", "content": SystemPrompt},
+                {"role": "user", "content": UserPrompt}
+            ],
+            Temperature=0.1,
+            MaxTokens=1200
+        )
+        Content = RetryContent
+        ModelUsed = RetryModelUsed
+        if not Content:
+            raise ValueError("No response from AI.")
 
     RecommendationData = _TryParseRecommendationJson(Content)
     if RecommendationData is None:
