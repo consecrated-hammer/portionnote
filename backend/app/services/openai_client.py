@@ -1,0 +1,116 @@
+from typing import Any
+
+import httpx
+
+from app.config import Settings
+
+
+def _ShouldUseResponsesEndpoint() -> bool:
+    if Settings.OpenAiBaseUrl.rstrip("/").endswith("/responses"):
+        return True
+    return Settings.OpenAiModel.startswith("gpt-5")
+
+
+def _ResolveOpenAiUrl(UseResponses: bool) -> str:
+    BaseUrl = Settings.OpenAiBaseUrl.rstrip("/")
+    if not UseResponses:
+        return BaseUrl
+
+    if BaseUrl.endswith("/chat/completions"):
+        return BaseUrl.replace("/chat/completions", "/responses")
+    if BaseUrl.endswith("/v1"):
+        return f"{BaseUrl}/responses"
+    if BaseUrl.endswith("/responses"):
+        return BaseUrl
+    return "https://api.openai.com/v1/responses"
+
+
+def _BuildResponsesInput(Messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    Normalized: list[dict[str, Any]] = []
+    for Message in Messages:
+        Role = Message.get("role", "user")
+        Content = Message.get("content", "")
+        if isinstance(Content, list):
+            ContentItems = []
+            for Item in Content:
+                if isinstance(Item, dict):
+                    ContentItems.append(Item)
+            if not ContentItems:
+                ContentItems = [{"type": "text", "text": str(Content)}]
+        else:
+            ContentItems = [{"type": "text", "text": str(Content)}]
+        Normalized.append({"role": Role, "content": ContentItems})
+    return Normalized
+
+
+def _ExtractOpenAiContent(Data: dict[str, Any]) -> str:
+    OutputText = Data.get("output_text")
+    if isinstance(OutputText, str) and OutputText.strip():
+        return OutputText
+
+    OutputItems = Data.get("output")
+    if isinstance(OutputItems, list):
+        TextParts: list[str] = []
+        for Item in OutputItems:
+            if not isinstance(Item, dict):
+                continue
+            ContentItems = Item.get("content", [])
+            if not isinstance(ContentItems, list):
+                continue
+            for Content in ContentItems:
+                if not isinstance(Content, dict):
+                    continue
+                TextValue = Content.get("text")
+                if isinstance(TextValue, str) and TextValue:
+                    TextParts.append(TextValue)
+        Joined = "\n".join(TextParts).strip()
+        if Joined:
+            return Joined
+
+    Choices = Data.get("choices", [])
+    if isinstance(Choices, list) and Choices:
+        ContentValue = Choices[0].get("message", {}).get("content", "")
+        if isinstance(ContentValue, str):
+            return ContentValue
+
+    return ""
+
+
+def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxTokens: int | None = None) -> str:
+    if not Settings.OpenAiApiKey:
+        raise ValueError("OpenAI API key not configured.")
+
+    UseResponses = _ShouldUseResponsesEndpoint()
+    Url = _ResolveOpenAiUrl(UseResponses)
+
+    if UseResponses:
+        Payload: dict[str, Any] = {
+            "model": Settings.OpenAiModel,
+            "input": _BuildResponsesInput(Messages),
+            "temperature": Temperature
+        }
+        if MaxTokens is not None:
+            Payload["max_output_tokens"] = MaxTokens
+    else:
+        Payload = {
+            "model": Settings.OpenAiModel,
+            "messages": Messages,
+            "temperature": Temperature
+        }
+        if MaxTokens is not None:
+            Payload["max_tokens"] = MaxTokens
+
+    Headers = {
+        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
+        "Content-Type": "application/json"
+    }
+
+    Response = httpx.post(
+        Url,
+        headers=Headers,
+        json=Payload,
+        timeout=30.0
+    )
+    Response.raise_for_status()
+    Data = Response.json()
+    return _ExtractOpenAiContent(Data)

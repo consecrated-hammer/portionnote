@@ -5,9 +5,8 @@ import json
 from datetime import datetime
 from typing import Optional
 
-import httpx
-
 from app.config import Settings
+from app.services.openai_client import GetOpenAiContent
 
 
 class NutritionRecommendation:
@@ -118,31 +117,14 @@ Base your recommendations on:
 
 Provide personalized daily nutrition targets."""
 
-    Payload = {
-        "model": Settings.OpenAiModel,
-        "messages": [
+    Content = GetOpenAiContent(
+        [
             {"role": "system", "content": SystemPrompt},
             {"role": "user", "content": UserPrompt}
         ],
-        "temperature": 0.3,
-        "max_tokens": 600
-    }
-
-    Headers = {
-        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-        "Content-Type": "application/json"
-    }
-
-    Response = httpx.post(
-        Settings.OpenAiBaseUrl,
-        headers=Headers,
-        json=Payload,
-        timeout=30.0
+        Temperature=0.3,
+        MaxTokens=600
     )
-    Response.raise_for_status()
-    
-    Data = Response.json()
-    Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
     
     if not Content:
         raise ValueError("No response from AI.")

@@ -9,6 +9,7 @@ from typing import Optional
 import httpx
 
 from app.config import Settings
+from app.services.openai_client import GetOpenAiContent
 from app.utils.logger import GetLogger
 
 Logger = GetLogger("food_lookup_service")
@@ -164,31 +165,14 @@ Serving size rules:
 
 Use standard serving sizes. Be precise with nutritional values based on USDA or Australian food databases."""
 
-    Payload = {
-        "model": Settings.OpenAiModel,
-        "messages": [
+    Content = GetOpenAiContent(
+        [
             {"role": "system", "content": SystemPrompt},
             {"role": "user", "content": f"Look up nutritional information for: {Query}"}
         ],
-        "temperature": 0.3,
-        "max_tokens": 500
-    }
-
-    Headers = {
-        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-        "Content-Type": "application/json"
-    }
-
-    Response = httpx.post(
-        Settings.OpenAiBaseUrl,
-        headers=Headers,
-        json=Payload,
-        timeout=30.0
+        Temperature=0.3,
+        MaxTokens=500
     )
-    Response.raise_for_status()
-    
-    Data = Response.json()
-    Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
     FoodData = ParseLookupJson(Content)
     if isinstance(FoodData, list):
         if not FoodData:
@@ -236,31 +220,14 @@ Serving size rules:
 
 When size variants exist for menu items or branded meals, include small, medium, and large entries. Otherwise return the most common measurable serving sizes."""
 
-    Payload = {
-        "model": Settings.OpenAiModel,
-        "messages": [
+    Content = GetOpenAiContent(
+        [
             {"role": "system", "content": SystemPrompt},
             {"role": "user", "content": f"Look up nutritional information for: {Query}"}
         ],
-        "temperature": 0.3,
-        "max_tokens": 700
-    }
-
-    Headers = {
-        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-        "Content-Type": "application/json"
-    }
-
-    Response = httpx.post(
-        Settings.OpenAiBaseUrl,
-        headers=Headers,
-        json=Payload,
-        timeout=30.0
+        Temperature=0.3,
+        MaxTokens=700
     )
-    Response.raise_for_status()
-
-    Data = Response.json()
-    Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
     FoodData = ParseLookupJson(Content)
 
     if isinstance(FoodData, dict):
@@ -513,31 +480,14 @@ Example for "veg":
     UserPrompt = f'Suggest Australian foods matching: "{Query}"'
 
     try:
-        Payload = {
-            "model": Settings.OpenAiModel,
-            "messages": [
+        Content = GetOpenAiContent(
+            [
                 {"role": "system", "content": SystemPrompt},
                 {"role": "user", "content": UserPrompt}
             ],
-            "temperature": 0.5,
-            "max_tokens": 300
-        }
-
-        Headers = {
-            "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-            "Content-Type": "application/json"
-        }
-
-        Response = httpx.post(
-            Settings.OpenAiBaseUrl,
-            headers=Headers,
-            json=Payload,
-            timeout=15.0
+            Temperature=0.5,
+            MaxTokens=300
         )
-        Response.raise_for_status()
-        
-        Data = Response.json()
-        Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
         
         if not Content:
             return []

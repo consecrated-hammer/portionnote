@@ -1,9 +1,8 @@
 import json
 from typing import Optional, Tuple
 
-import httpx
-
 from app.config import Settings
+from app.services.openai_client import GetOpenAiContent
 
 
 _MASS_UNITS = {
@@ -235,31 +234,14 @@ Rules:
         f"Entry: {EntryQuantity} {EntryUnit}. Convert to servings."
     )
 
-    Payload = {
-        "model": Settings.OpenAiModel,
-        "messages": [
+    Content = GetOpenAiContent(
+        [
             {"role": "system", "content": SystemPrompt},
             {"role": "user", "content": UserPrompt}
         ],
-        "temperature": 0.2,
-        "max_tokens": 200
-    }
-
-    Headers = {
-        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-        "Content-Type": "application/json"
-    }
-
-    Response = httpx.post(
-        Settings.OpenAiBaseUrl,
-        headers=Headers,
-        json=Payload,
-        timeout=20.0
+        Temperature=0.2,
+        MaxTokens=200
     )
-    Response.raise_for_status()
-
-    Data = Response.json()
-    Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
     Parsed = _ParseJsonContent(Content)
 
     ServingsValue = Parsed.get("Servings")
