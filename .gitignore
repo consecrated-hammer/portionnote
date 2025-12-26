@@ -238,3 +238,6 @@ coverage/
 
 # Temporary
 _temp/
+
+# Scripts (local/dev helpers)
+scripts/
