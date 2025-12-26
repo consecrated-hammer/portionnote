@@ -15,6 +15,7 @@ class MealType(str, Enum):
 
 class Food(BaseModel):
     FoodId: str
+    OwnerUserId: Optional[str] = None
     FoodName: str
     ServingDescription: str  # Deprecated: use ServingQuantity + ServingUnit
     ServingQuantity: float = 1.0
@@ -67,6 +68,9 @@ class MealEntry(BaseModel):
     FoodId: Optional[str] = None
     MealTemplateId: Optional[str] = None
     Quantity: float
+    EntryQuantity: Optional[float] = None
+    EntryUnit: Optional[str] = None
+    ConversionDetail: Optional[str] = None
     EntryNotes: Optional[str] = None
     SortOrder: int
     ScheduleSlotId: Optional[str] = None
@@ -91,6 +95,9 @@ class MealEntryWithFood(BaseModel):
     SugarPerServing: Optional[float] = None
     SodiumPerServing: Optional[float] = None
     Quantity: float
+    EntryQuantity: Optional[float] = None
+    EntryUnit: Optional[str] = None
+    ConversionDetail: Optional[str] = None
     EntryNotes: Optional[str] = None
     SortOrder: int
     ScheduleSlotId: Optional[str] = None
@@ -200,6 +207,20 @@ class User(BaseModel):
     IsAdmin: bool
 
 
+class AdminUserSummary(BaseModel):
+    UserId: str
+    Email: str
+    FirstName: Optional[str] = None
+    LastName: Optional[str] = None
+    AuthProvider: str
+    IsAdmin: bool
+    CreatedAt: Optional[str] = None
+
+
+class AdminUserListResponse(BaseModel):
+    Users: list[AdminUserSummary]
+
+
 class UpdateProfileInput(BaseModel):
     FirstName: Optional[str] = Field(default=None, max_length=100)
     LastName: Optional[str] = Field(default=None, max_length=100)
@@ -207,6 +228,18 @@ class UpdateProfileInput(BaseModel):
     HeightCm: Optional[int] = Field(default=None, ge=50, le=300)
     WeightKg: Optional[float] = Field(default=None, ge=20, le=500)
     ActivityLevel: Optional[str] = Field(default=None)
+
+
+class AdminUserCreateInput(BaseModel):
+    Email: str = Field(min_length=1)
+    Password: str = Field(min_length=8)
+    FirstName: str = Field(min_length=1)
+    LastName: Optional[str] = None
+    IsAdmin: bool = False
+
+
+class AdminUserUpdateInput(BaseModel):
+    IsAdmin: bool
 
 
 class Suggestion(BaseModel):
@@ -217,6 +250,7 @@ class Suggestion(BaseModel):
 
 class SuggestionsResponse(BaseModel):
     Suggestions: list[Suggestion]
+    ModelUsed: Optional[str] = None
 
 
 class DailyLogWithEntries(BaseModel):
@@ -316,6 +350,8 @@ class CreateMealEntryInput(BaseModel):
     FoodId: Optional[str] = None
     MealTemplateId: Optional[str] = None
     Quantity: float = Field(gt=0)
+    EntryQuantity: Optional[float] = Field(default=None, gt=0)
+    EntryUnit: Optional[str] = Field(default=None, min_length=1)
     EntryNotes: Optional[str] = None
     SortOrder: int = 0
     ScheduleSlotId: Optional[str] = None
@@ -357,6 +393,8 @@ class MealTemplateItem(BaseModel):
     FoodId: str
     MealType: MealType
     Quantity: float
+    EntryQuantity: Optional[float] = None
+    EntryUnit: Optional[str] = None
     EntryNotes: Optional[str] = None
     SortOrder: int
     FoodName: str
@@ -372,10 +410,32 @@ class MealTemplateListResponse(BaseModel):
     Templates: list[MealTemplateWithItems]
 
 
+class MealTextParseInput(BaseModel):
+    Text: str = Field(min_length=1)
+    KnownFoods: Optional[list[str]] = None
+
+
+class MealTextParseResponse(BaseModel):
+    MealName: str
+    ServingQuantity: float = 1.0
+    ServingUnit: str = "serving"
+    CaloriesPerServing: int
+    ProteinPerServing: float
+    FibrePerServing: Optional[float] = None
+    CarbsPerServing: Optional[float] = None
+    FatPerServing: Optional[float] = None
+    SaturatedFatPerServing: Optional[float] = None
+    SugarPerServing: Optional[float] = None
+    SodiumPerServing: Optional[float] = None
+    Summary: str
+
+
 class MealTemplateItemInput(BaseModel):
     FoodId: str
     MealType: MealType
     Quantity: float = Field(gt=0)
+    EntryQuantity: Optional[float] = Field(default=None, gt=0)
+    EntryUnit: Optional[str] = Field(default=None, min_length=1)
     EntryNotes: Optional[str] = None
     SortOrder: int = 0
 
@@ -409,6 +469,7 @@ class NutritionRecommendationResponse(BaseModel):
     SugarTarget: Optional[float] = None
     SodiumTarget: Optional[float] = None
     Explanation: str
+    ModelUsed: Optional[str] = None
 
 
 class RecommendationLog(BaseModel):

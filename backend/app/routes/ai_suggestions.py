@@ -13,8 +13,8 @@ AiSuggestionRouter = APIRouter()
 async def GetAiSuggestionsRoute(LogDate: str | None = None, CurrentUser: User = Depends(RequireUser)):
     try:
         TargetDate = LogDate or date.today().isoformat()
-        Suggestions = GetAiSuggestions(CurrentUser.UserId, TargetDate)
-        return SuggestionsResponse(Suggestions=Suggestions)
+        Suggestions, ModelUsed = GetAiSuggestions(CurrentUser.UserId, TargetDate)
+        return SuggestionsResponse(Suggestions=Suggestions, ModelUsed=ModelUsed)
     except ValueError as ErrorValue:
         raise HTTPException(status_code=400, detail=str(ErrorValue)) from ErrorValue
     except Exception as ErrorValue:

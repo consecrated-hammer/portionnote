@@ -1,6 +1,9 @@
 import axios from "axios";
 import {
   AiSuggestionResponse,
+  AdminUser,
+  AdminUserCreateInput,
+  AdminUserListResponse,
   DailyLogCreateResponse,
   DailyLogResponse,
   ScheduleSlot,
@@ -11,6 +14,7 @@ import {
   LoginInput,
   MealTemplateListResponse,
   MealTemplateWithItems,
+  MealTextParseResponse,
   MealEntryWithFood,
   MealType,
   NutritionRecommendation,
@@ -162,6 +166,22 @@ export const CreateInvite = async (Email: string): Promise<InviteResponse> => {
   return Response.data as InviteResponse;
 };
 
+export const GetAdminUsers = async (): Promise<AdminUser[]> => {
+  const Response = await ApiClient.get("/api/admin/users");
+  const Data = Response.data as AdminUserListResponse;
+  return Array.isArray(Data?.Users) ? Data.Users : [];
+};
+
+export const CreateAdminUser = async (Input: AdminUserCreateInput): Promise<AdminUser> => {
+  const Response = await ApiClient.post("/api/admin/users", Input);
+  return Response.data.User as AdminUser;
+};
+
+export const UpdateAdminUser = async (UserId: string, IsAdmin: boolean): Promise<AdminUser> => {
+  const Response = await ApiClient.patch(`/api/admin/users/${UserId}`, { IsAdmin });
+  return Response.data.User as AdminUser;
+};
+
 export const GetGooglePendingInvite = async (): Promise<PendingGoogleInvite> => {
   const Response = await ApiClient.get("/api/auth/google/pending");
   return Response.data as PendingGoogleInvite;
@@ -286,6 +306,8 @@ export const CreateMealTemplate = async (Input: {
     FoodId: string;
     MealType: MealType;
     Quantity: number;
+    EntryQuantity?: number;
+    EntryUnit?: string;
     EntryNotes?: string | null;
     SortOrder: number;
   }>;
@@ -303,12 +325,22 @@ export const UpdateMealTemplate = async (MealTemplateId: string, Input: {
     FoodId: string;
     MealType: MealType;
     Quantity: number;
+    EntryQuantity?: number;
+    EntryUnit?: string;
     EntryNotes?: string | null;
     SortOrder: number;
   }>;
 }): Promise<MealTemplateWithItems> => {
   const Response = await ApiClient.patch(`/api/meal-templates/${MealTemplateId}`, Input);
   return Response.data.Template as MealTemplateWithItems;
+};
+
+export const ParseMealText = async (Text: string, KnownFoods: string[] = []): Promise<MealTextParseResponse> => {
+  const Response = await ApiClient.post("/api/meal-templates/ai-parse", {
+    Text,
+    KnownFoods
+  });
+  return Response.data as MealTextParseResponse;
 };
 export const GetDailyLog = async (LogDate: string): Promise<DailyLogResponse> => {
   const Response = await ApiClient.get(`/api/daily-logs/${LogDate}`);
@@ -341,6 +373,8 @@ export const CreateMealEntry = async (Input: {
   FoodId?: string | null;
   MealTemplateId?: string | null;
   Quantity: number;
+  EntryQuantity?: number | null;
+  EntryUnit?: string | null;
   EntryNotes?: string | null;
   SortOrder?: number;
   ScheduleSlotId?: string | null;
@@ -351,6 +385,8 @@ export const CreateMealEntry = async (Input: {
     FoodId: Input.FoodId ?? null,
     MealTemplateId: Input.MealTemplateId ?? null,
     Quantity: Input.Quantity,
+    EntryQuantity: Input.EntryQuantity ?? null,
+    EntryUnit: Input.EntryUnit ?? null,
     EntryNotes: Input.EntryNotes ?? null,
     SortOrder: Input.SortOrder ?? 0,
     ScheduleSlotId: Input.ScheduleSlotId ?? null

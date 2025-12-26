@@ -412,7 +412,7 @@ async def test_ai_suggestions_route(monkeypatch, temp_db):
     user = User(UserId="User-2", Email="ai@example.com", FirstName=None, LastName=None, IsAdmin=False)
 
     def DummySuggestions(_user_id, _log_date):
-        return [Suggestion(SuggestionType="AiSuggestion", Title="Test", Detail="Detail")]
+        return [Suggestion(SuggestionType="AiSuggestion", Title="Test", Detail="Detail")], "gpt-5-mini"
 
     monkeypatch.setattr("app.routes.ai_suggestions.GetAiSuggestions", DummySuggestions)
 

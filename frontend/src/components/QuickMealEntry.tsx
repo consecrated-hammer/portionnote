@@ -12,7 +12,7 @@ interface QuickMealEntryProps {
     LastUsed: string;
   }>;
   DefaultMealType?: MealType;
-  OnSubmit: (FoodId: string, MealType: MealType, Quantity: number) => Promise<void>;
+  OnSubmit: (FoodId: string, MealType: MealType, EntryQuantity: number, EntryUnit: string) => Promise<void>;
   OnSubmitTemplate?: (TemplateId: string, MealType: MealType) => Promise<void>;
   OnCancel?: () => void;
   AutoFocus?: boolean;
@@ -31,6 +31,19 @@ const MealTypeOptions: { Label: string; Value: MealType; Emoji: string }[] = [
   { Label: "Evening Snack", Value: "Snack3", Emoji: "🌙" }
 ];
 
+const EntryUnitOptions = [
+  "serving",
+  "g",
+  "mL",
+  "tsp",
+  "tbsp",
+  "cup",
+  "piece",
+  "slice",
+  "biscuit",
+  "handful"
+];
+
 // Smart default based on time of day
 const GetSmartMealType = (): MealType => {
   const Hour = new Date().getHours();
@@ -45,6 +58,33 @@ const GetSmartMealType = (): MealType => {
 type FoodOrTemplate = 
   | { Type: "food"; Food: Food }
   | { Type: "template"; Template: MealTemplateWithItems };
+
+const NormalizeUnit = (Unit: string) => {
+  const Value = Unit.trim().toLowerCase();
+  if (Value === "ml") return "ml";
+  if (Value === "l") return "l";
+  if (Value === "grams" || Value === "gram" || Value === "gr") return "g";
+  if (Value === "servings") return "serving";
+  if (Value.endsWith("s") && Value.length > 1) {
+    return Value.slice(0, -1);
+  }
+  return Value;
+};
+
+const GetPreviewServings = (FoodItem: Food, EntryQty: number, EntryUnit: string) => {
+  const NormalizedEntryUnit = NormalizeUnit(EntryUnit);
+  const NormalizedServingUnit = NormalizeUnit(FoodItem.ServingUnit);
+
+  if (NormalizedEntryUnit === "serving") {
+    return EntryQty;
+  }
+
+  if (NormalizedEntryUnit === NormalizedServingUnit && FoodItem.ServingQuantity > 0) {
+    return EntryQty / FoodItem.ServingQuantity;
+  }
+
+  return null;
+};
 
 export const QuickMealEntry = ({
   Foods,
@@ -63,7 +103,8 @@ export const QuickMealEntry = ({
   const Navigate = useNavigate();
   const [MealType, SetMealType] = useState<MealType>(DefaultMealType ?? GetSmartMealType());
   const [SelectedItem, SetSelectedItem] = useState<FoodOrTemplate | null>(null);
-  const [Quantity, SetQuantity] = useState(1);
+  const [EntryQuantity, SetEntryQuantity] = useState("1");
+  const [EntryUnit, SetEntryUnit] = useState("serving");
   const [IsSubmitting, SetIsSubmitting] = useState(false);
   const [SearchTerm, SetSearchTerm] = useState("");
   const AppliedPreselectRef = useRef<string | null>(null);
@@ -158,14 +199,16 @@ export const QuickMealEntry = ({
     if (Match) {
       SetSearchTerm(Match.FoodName);
       SetSelectedItem({ Type: "food", Food: Match });
-      SetQuantity(InitialQuantity && InitialQuantity > 0 ? InitialQuantity : 1);
+      SetEntryQuantity(String(InitialQuantity && InitialQuantity > 0 ? InitialQuantity : 1));
+      SetEntryUnit("serving");
       AppliedPreselectRef.current = PreselectedFoodId;
     }
   }, [Foods, PreselectedFoodId, InitialQuantity]);
 
   useEffect(() => {
     if (InitialQuantity && InitialQuantity > 0) {
-      SetQuantity(InitialQuantity);
+      SetEntryQuantity(String(InitialQuantity));
+      SetEntryUnit("serving");
     }
   }, [InitialQuantity]);
 
@@ -175,15 +218,18 @@ export const QuickMealEntry = ({
     SetIsSubmitting(true);
     try {
       if (SelectedItem.Type === "food") {
-        if (Quantity <= 0) return;
-        await OnSubmit(SelectedItem.Food.FoodId, MealType, Quantity);
+        const QuantityValue = Number(EntryQuantity);
+        if (!Number.isFinite(QuantityValue) || QuantityValue <= 0) return;
+        if (!EntryUnit.trim()) return;
+        await OnSubmit(SelectedItem.Food.FoodId, MealType, QuantityValue, EntryUnit.trim());
       } else {
         if (OnSubmitTemplate) {
           await OnSubmitTemplate(SelectedItem.Template.Template.MealTemplateId, MealType);
         }
       }
       // Reset form
-      SetQuantity(1);
+      SetEntryQuantity("1");
+      SetEntryUnit("serving");
       SetSelectedItem(null);
       SetSearchTerm("");
     } catch (Error) {
@@ -194,7 +240,9 @@ export const QuickMealEntry = ({
   };
 
   const AdjustQuantity = (Delta: number) => {
-    SetQuantity((Prev) => Math.max(0.5, Prev + Delta));
+    const Current = Number(EntryQuantity);
+    const NextValue = Number.isFinite(Current) ? Math.max(0.1, Current + Delta) : 1;
+    SetEntryQuantity(NextValue.toString());
   };
 
   const HandleAddFood = () => {
@@ -302,8 +350,16 @@ export const QuickMealEntry = ({
                 
                 if (Item.Type === "food") {
                   const FoodItem = Item.Food;
-                  const TotalCalories = Math.round(FoodItem.CaloriesPerServing * Quantity);
-                  const TotalProtein = (FoodItem.ProteinPerServing * Quantity).toFixed(1);
+                  const EntryQuantityValue = Number(EntryQuantity);
+                  const PreviewServings = Number.isFinite(EntryQuantityValue)
+                    ? GetPreviewServings(FoodItem, EntryQuantityValue, EntryUnit)
+                    : null;
+                  const TotalCalories = PreviewServings !== null
+                    ? Math.round(FoodItem.CaloriesPerServing * PreviewServings)
+                    : null;
+                  const TotalProtein = PreviewServings !== null
+                    ? (FoodItem.ProteinPerServing * PreviewServings).toFixed(1)
+                    : null;
 
                   return (
                     <button
@@ -323,9 +379,14 @@ export const QuickMealEntry = ({
                           <p className="text-xs text-Ink/60 mt-1">
                             {FoodItem.ServingQuantity} {FoodItem.ServingUnit} • {FoodItem.CaloriesPerServing} cal • {FoodItem.ProteinPerServing}g protein
                           </p>
-                          {IsSelected && Quantity !== 1 && (
+                          {IsSelected && PreviewServings !== null && PreviewServings !== 1 && (
                             <p className="text-xs text-blue-600 mt-1 font-medium">
                               Total: {TotalCalories} cal • {TotalProtein}g protein
+                            </p>
+                          )}
+                          {IsSelected && PreviewServings === null && EntryUnit.trim() !== "serving" && (
+                            <p className="text-xs text-blue-600 mt-1 font-medium">
+                              Total calculated after save
                             </p>
                           )}
                         </div>
@@ -386,41 +447,53 @@ export const QuickMealEntry = ({
         </div>
       </div>
 
-      {/* Quantity Stepper */}
+      {/* Quantity and Unit */}
       {SelectedItem && SelectedItem.Type === "food" && (
         <div className="space-y-2">
-          <label className="text-sm font-medium text-Ink/70">Servings:</label>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => AdjustQuantity(-0.5)}
-              disabled={Quantity <= 0.5}
-              className="w-12 h-12 flex items-center justify-center rounded-lg bg-white border-2 border-Ink/20 hover:bg-Ink/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              style={{ minHeight: "48px", minWidth: "48px" }}
-            >
-              <span className="material-icons">remove</span>
-            </button>
-            <div className="flex-1 text-center">
-              <p className="text-3xl font-bold text-Ink">{Quantity.toFixed(1)}</p>
-              <p className="text-xs text-Ink/60">servings</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => AdjustQuantity(0.5)}
-              className="w-12 h-12 flex items-center justify-center rounded-lg bg-white border-2 border-Ink/20 hover:bg-Ink/5 transition-colors"
-              style={{ minHeight: "48px", minWidth: "48px" }}
-            >
-              <span className="material-icons">add</span>
-            </button>
+          <label className="text-sm font-medium text-Ink/70">Amount:</label>
+          <div className="grid grid-cols-[1fr,140px] gap-3">
+            <input
+              className="InputField"
+              type="number"
+              min="0.01"
+              step="any"
+              value={EntryQuantity}
+              onChange={(Event) => SetEntryQuantity(Event.target.value)}
+            />
+            <input
+              className="InputField"
+              list="entry-unit-options"
+              value={EntryUnit}
+              onChange={(Event) => SetEntryUnit(Event.target.value)}
+              placeholder="Unit"
+            />
+            <datalist id="entry-unit-options">
+              {EntryUnitOptions.map((Unit) => (
+                <option key={Unit} value={Unit} />
+              ))}
+            </datalist>
           </div>
+          {SelectedItem.Type === "food" && (
+            <p className="text-xs text-Ink/60">
+              Serving size: {SelectedItem.Food.ServingQuantity} {SelectedItem.Food.ServingUnit}
+            </p>
+          )}
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => AdjustQuantity(-1)}
+              onClick={() => AdjustQuantity(-0.5)}
               className="flex-1 px-3 py-2 rounded-lg bg-white border border-Ink/20 hover:bg-Ink/5 text-sm font-medium"
               style={{ minHeight: "44px" }}
             >
-              -1
+              -0.5
+            </button>
+            <button
+              type="button"
+              onClick={() => AdjustQuantity(0.5)}
+              className="flex-1 px-3 py-2 rounded-lg bg-white border border-Ink/20 hover:bg-Ink/5 text-sm font-medium"
+              style={{ minHeight: "44px" }}
+            >
+              +0.5
             </button>
             <button
               type="button"
@@ -450,7 +523,11 @@ export const QuickMealEntry = ({
         <button
           type="button"
           onClick={HandleSubmit}
-          disabled={!SelectedItem || IsSubmitting || (SelectedItem.Type === "food" && Quantity <= 0)}
+          disabled={
+            !SelectedItem ||
+            IsSubmitting ||
+            (SelectedItem.Type === "food" && (!Number.isFinite(Number(EntryQuantity)) || Number(EntryQuantity) <= 0))
+          }
           className="flex-1 px-4 py-3 rounded-lg bg-blue-600 text-white hover:bg-blue-700 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ minHeight: "48px" }}
         >

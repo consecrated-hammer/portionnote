@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   CreateInvite,
   GetAiNutritionRecommendations,
@@ -608,6 +609,23 @@ export const SettingsPage = ({ onLogout, CurrentUser }: SettingsPageProps) => {
 
       {/* Admin Invite Section */}
       {CurrentUser.IsAdmin && (
+        <div className="Card">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="material-icons text-Ink/70">manage_accounts</span>
+              <div>
+                <h3 className="font-medium text-Ink">User management</h3>
+                <p className="text-xs text-Ink/60">Add local users and set admin access</p>
+              </div>
+            </div>
+            <Link className="OutlineButton" to="/settings/users">
+              Open
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {CurrentUser.IsAdmin && (
         <div className="Card p-0 overflow-hidden">
           <button
             className="w-full flex items-center justify-between p-4 hover:bg-Ink/5 transition-colors"
@@ -760,6 +778,9 @@ export const SettingsPage = ({ onLogout, CurrentUser }: SettingsPageProps) => {
               {/* Explanation */}
               <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-100">
                 <p className="text-sm text-Ink/80 leading-relaxed">{Recommendations.Explanation}</p>
+                {Recommendations.ModelUsed && (
+                  <p className="mt-2 text-xs text-Ink/60">Model used: {Recommendations.ModelUsed}</p>
+                )}
               </div>
 
               {/* Recommendations Grid */}

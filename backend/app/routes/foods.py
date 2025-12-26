@@ -37,7 +37,7 @@ async def CreateFood(Input: CreateFoodInput, CurrentUser: User = Depends(Require
 @FoodRouter.patch("/{FoodId}", response_model=FoodResponse, tags=["Foods"])
 async def EditFood(FoodId: str, Input: UpdateFoodInput, CurrentUser: User = Depends(RequireUser)):
     try:
-        FoodItem = UpdateFood(CurrentUser.UserId, FoodId, Input)
+        FoodItem = UpdateFood(CurrentUser.UserId, FoodId, Input, IsAdmin=CurrentUser.IsAdmin)
         return FoodResponse(Food=FoodItem)
     except ValueError as ErrorValue:
         raise HTTPException(status_code=404, detail=str(ErrorValue)) from ErrorValue
@@ -48,7 +48,7 @@ async def EditFood(FoodId: str, Input: UpdateFoodInput, CurrentUser: User = Depe
 @FoodRouter.delete("/{FoodId}", status_code=204, tags=["Foods"])
 async def RemoveFood(FoodId: str, CurrentUser: User = Depends(RequireUser)):
     try:
-        DeleteFood(CurrentUser.UserId, FoodId)
+        DeleteFood(CurrentUser.UserId, FoodId, IsAdmin=CurrentUser.IsAdmin)
     except ValueError as ErrorValue:
         Message = str(ErrorValue)
         if Message == "Food not found":

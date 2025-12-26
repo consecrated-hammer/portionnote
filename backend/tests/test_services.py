@@ -103,6 +103,47 @@ def test_daily_log_flow_with_entries(test_user_id):
     assert EntriesAfterDelete == []
 
 
+def test_create_meal_entry_with_unit_conversion(test_user_id):
+    Food = UpsertFood(
+        test_user_id,
+        CreateFoodInput(
+            FoodName="Coffee Milk",
+            ServingQuantity=250.0,
+            ServingUnit="mL",
+            CaloriesPerServing=150,
+            ProteinPerServing=8.0,
+            IsFavourite=False
+        )
+    )
+
+    DailyLog = UpsertDailyLog(
+        test_user_id,
+        CreateDailyLogInput(
+            LogDate="2024-01-05",
+            Steps=0,
+            StepKcalFactorOverride=None
+        )
+    )
+
+    MealEntry = CreateMealEntry(
+        test_user_id,
+        CreateMealEntryInput(
+            DailyLogId=DailyLog.DailyLogId,
+            MealType=MealType.Snack1,
+            FoodId=Food.FoodId,
+            Quantity=1,
+            EntryQuantity=125,
+            EntryUnit="mL",
+            EntryNotes=None,
+            SortOrder=0
+        )
+    )
+
+    assert MealEntry.EntryQuantity == 125
+    assert MealEntry.EntryUnit == "mL"
+    assert MealEntry.Quantity == pytest.approx(0.5, rel=1e-3)
+    assert MealEntry.ConversionDetail is not None
+
 def test_weekly_summary_calculation(seeded_db):
     AdminUserId = seeded_db
     Food = UpsertFood(

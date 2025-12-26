@@ -8,6 +8,7 @@ import { HistoryPage } from "./pages/HistoryPage";
 import { LogPage } from "./pages/LogPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TodayPage } from "./pages/TodayPage";
+import { UserManagementPage } from "./pages/UserManagementPage";
 import { AuthProvider, UseAuth } from "./contexts/AuthContext";
 import { AppLogger, InitializeFrontendLogging } from "./utils/Logger";
 
@@ -60,6 +61,7 @@ const AppRoutes = () => {
           path="/settings"
           element={<SettingsPage onLogout={Logout} CurrentUser={CurrentUser} />}
         />
+        <Route path="/settings/users" element={<UserManagementPage />} />
         <Route path="/auth" element={<Navigate to="/today" replace />} />
       </Routes>
     </AppShell>

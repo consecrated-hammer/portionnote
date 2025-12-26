@@ -2,9 +2,11 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { FoodsPage } from "../pages/FoodsPage";
-import { GetFoods, GetMealTemplates } from "../services/ApiClient";
+import { AuthProvider } from "../contexts/AuthContext";
+import { GetCurrentUser, GetFoods, GetMealTemplates } from "../services/ApiClient";
 
 vi.mock("../services/ApiClient", () => ({
+  GetCurrentUser: vi.fn(),
   GetFoods: vi.fn(),
   GetMealTemplates: vi.fn(),
   DeleteFood: vi.fn(),
@@ -12,6 +14,13 @@ vi.mock("../services/ApiClient", () => ({
 }));
 
 it("loads foods from the api", async () => {
+  vi.mocked(GetCurrentUser).mockResolvedValue({
+    UserId: "User-1",
+    Email: "user@example.com",
+    FirstName: "Test",
+    LastName: "User",
+    IsAdmin: false
+  });
   vi.mocked(GetFoods).mockResolvedValue([
     {
       FoodId: "Food-1",
@@ -29,7 +38,9 @@ it("loads foods from the api", async () => {
 
   render(
     <MemoryRouter initialEntries={["/foods"]}>
-      <FoodsPage />
+      <AuthProvider>
+        <FoodsPage />
+      </AuthProvider>
     </MemoryRouter>
   );
 
@@ -38,12 +49,21 @@ it("loads foods from the api", async () => {
 });
 
 it("shows error message when api fails", async () => {
+  vi.mocked(GetCurrentUser).mockResolvedValue({
+    UserId: "User-1",
+    Email: "user@example.com",
+    FirstName: "Test",
+    LastName: "User",
+    IsAdmin: false
+  });
   vi.mocked(GetFoods).mockRejectedValue(new Error("Failure"));
   vi.mocked(GetMealTemplates).mockRejectedValue(new Error("Failure"));
 
   render(
     <MemoryRouter initialEntries={["/foods"]}>
-      <FoodsPage />
+      <AuthProvider>
+        <FoodsPage />
+      </AuthProvider>
     </MemoryRouter>
   );
 
@@ -51,12 +71,21 @@ it("shows error message when api fails", async () => {
 });
 
 it("prepopulates add food form from query params", async () => {
+  vi.mocked(GetCurrentUser).mockResolvedValue({
+    UserId: "User-1",
+    Email: "user@example.com",
+    FirstName: "Test",
+    LastName: "User",
+    IsAdmin: false
+  });
   vi.mocked(GetFoods).mockResolvedValue([]);
   vi.mocked(GetMealTemplates).mockResolvedValue([]);
 
   render(
     <MemoryRouter initialEntries={["/foods?addFood=1&foodName=Test%20Food"]}>
-      <FoodsPage />
+      <AuthProvider>
+        <FoodsPage />
+      </AuthProvider>
     </MemoryRouter>
   );
 

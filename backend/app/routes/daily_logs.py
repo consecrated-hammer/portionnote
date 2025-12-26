@@ -124,7 +124,7 @@ async def CreateMealEntryRoute(Input: CreateMealEntryInput, CurrentUser: User = 
 @DailyLogRouter.delete("/meal-entries/{MealEntryId}", status_code=204, tags=["DailyLogs"])
 async def DeleteMealEntryRoute(MealEntryId: str, CurrentUser: User = Depends(RequireUser)):
     try:
-        DeleteMealEntry(CurrentUser.UserId, MealEntryId)
+        DeleteMealEntry(CurrentUser.UserId, MealEntryId, IsAdmin=CurrentUser.IsAdmin)
         return Response(status_code=204)
     except Exception as ErrorValue:
         raise HTTPException(status_code=400, detail="Failed to delete meal entry.") from ErrorValue

@@ -1,6 +1,6 @@
 """Tests for nutrition recommendations service."""
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from app.services.nutrition_recommendations_service import (
@@ -35,14 +35,7 @@ def test_get_ai_nutrition_recommendations_success(monkeypatch):
     WeightKg = 75.0
     ActivityLevel = "moderately_active"
 
-    MockResponse = MagicMock()
-    MockResponse.status_code = 200
-    MockResponse.raise_for_status = MagicMock()
-    MockResponse.json.return_value = {
-        "choices": [
-            {
-                "message": {
-                    "content": """```json
+    Content = """```json
 {
   "DailyCalorieTarget": 2500,
   "ProteinTargetMin": 94,
@@ -56,13 +49,12 @@ def test_get_ai_nutrition_recommendations_success(monkeypatch):
   "Explanation": "Your moderately active lifestyle with regular exercise requires adequate calories to support your training and recovery."
 }
 ```"""
-                }
-            }
-        ]
-    }
 
-    with patch("app.services.nutrition_recommendations_service.httpx.post", return_value=MockResponse):
-        Result = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        return_value=(Content, "gpt-4.1")
+    ):
+        Result, ModelUsed = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
         assert isinstance(Result, NutritionRecommendation)
         assert Result.DailyCalorieTarget == 2500
@@ -75,6 +67,7 @@ def test_get_ai_nutrition_recommendations_success(monkeypatch):
         assert Result.SugarTarget == 50
         assert Result.SodiumTarget == 2300
         assert "moderately active lifestyle" in Result.Explanation
+        assert ModelUsed == "gpt-4.1"
 
 
 def test_get_ai_nutrition_recommendations_minimal(monkeypatch):
@@ -84,26 +77,18 @@ def test_get_ai_nutrition_recommendations_minimal(monkeypatch):
     WeightKg = 55.0
     ActivityLevel = "sedentary"
 
-    MockResponse = MagicMock()
-    MockResponse.status_code = 200
-    MockResponse.raise_for_status = MagicMock()
-    MockResponse.json.return_value = {
-        "choices": [
-            {
-                "message": {
-                    "content": """{
+    Content = """{
   "DailyCalorieTarget": 1600,
   "ProteinTargetMin": 55,
   "ProteinTargetMax": 88,
   "Explanation": "These targets support your maintenance needs with adequate protein."
 }"""
-                }
-            }
-        ]
-    }
 
-    with patch("app.services.nutrition_recommendations_service.httpx.post", return_value=MockResponse):
-        Result = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        return_value=(Content, "gpt-4o-mini")
+    ):
+        Result, ModelUsed = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
         assert isinstance(Result, NutritionRecommendation)
         assert Result.DailyCalorieTarget == 1600
@@ -112,6 +97,7 @@ def test_get_ai_nutrition_recommendations_minimal(monkeypatch):
         assert Result.FibreTarget is None
         assert Result.CarbsTarget is None
         assert Result.FatTarget is None
+        assert ModelUsed == "gpt-4o-mini"
 
 
 def test_get_ai_nutrition_recommendations_api_error(monkeypatch):
@@ -121,11 +107,10 @@ def test_get_ai_nutrition_recommendations_api_error(monkeypatch):
     WeightKg = 75.0
     ActivityLevel = "moderately_active"
 
-    MockResponse = MagicMock()
-    MockResponse.status_code = 500
-    MockResponse.raise_for_status.side_effect = Exception("OpenAI API error: 500")
-
-    with patch("app.services.nutrition_recommendations_service.httpx.post", return_value=MockResponse):
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        side_effect=Exception("OpenAI API error: 500")
+    ):
         with pytest.raises(Exception) as ExcInfo:
             GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
@@ -139,20 +124,12 @@ def test_get_ai_nutrition_recommendations_invalid_response(monkeypatch):
     WeightKg = 75.0
     ActivityLevel = "moderately_active"
 
-    MockResponse = MagicMock()
-    MockResponse.status_code = 200
-    MockResponse.raise_for_status = MagicMock()
-    MockResponse.json.return_value = {
-        "choices": [
-            {
-                "message": {
-                    "content": "This is an invalid response without proper JSON."
-                }
-            }
-        ]
-    }
+    Content = "This is an invalid response without proper JSON."
 
-    with patch("app.services.nutrition_recommendations_service.httpx.post", return_value=MockResponse):
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        return_value=(Content, "gpt-4.1")
+    ):
         with pytest.raises(ValueError) as ExcInfo:
             GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
@@ -166,14 +143,7 @@ def test_get_ai_nutrition_recommendations_extra_active(monkeypatch):
     WeightKg = 85.0
     ActivityLevel = "extra_active"
 
-    MockResponse = MagicMock()
-    MockResponse.status_code = 200
-    MockResponse.raise_for_status = MagicMock()
-    MockResponse.json.return_value = {
-        "choices": [
-            {
-                "message": {
-                    "content": """```
+    Content = """```
 {
   "DailyCalorieTarget": 3200,
   "ProteinTargetMin": 140,
@@ -184,15 +154,14 @@ def test_get_ai_nutrition_recommendations_extra_active(monkeypatch):
   "Explanation": "Your high activity level requires significant energy and recovery support."
 }
 ```"""
-                }
-            }
-        ]
-    }
 
-    with patch("app.services.nutrition_recommendations_service.httpx.post", return_value=MockResponse):
-        Result = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
+    with patch(
+        "app.services.nutrition_recommendations_service.GetOpenAiContentWithModel",
+        return_value=(Content, "gpt-4.1")
+    ):
+        Result, ModelUsed = GetAiNutritionRecommendations(Age, HeightCm, WeightKg, ActivityLevel)
 
         assert Result.DailyCalorieTarget >= 3000
         assert Result.ProteinTargetMin >= 130
         assert "activity level" in Result.Explanation.lower()
-
+        assert ModelUsed == "gpt-4.1"
