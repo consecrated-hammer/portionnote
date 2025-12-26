@@ -753,12 +753,16 @@ export const FoodsPage = () => {
     try {
       const KnownFoods = Foods.map((FoodItem) => FoodItem.FoodName).slice(0, 200);
       const Response = await ParseMealText(AiMealText.trim(), KnownFoods);
-      SetAiMealTotals({
+      const Normalized = {
         ...Response,
         ServingUnit: NormalizeMealEntryUnit(Response.ServingUnit || "serving")
-      });
+      };
+      SetAiMealTotals(Normalized);
       if (!NewMealName.trim() && Response.MealName) {
         SetNewMealName(Response.MealName);
+      }
+      if ((Normalized.CaloriesPerServing ?? 0) <= 0 && (Normalized.ProteinPerServing ?? 0) <= 0) {
+        SetAiMealError("AI entry returned zero calories and protein. Try again.");
       }
     } catch (ErrorValue) {
       SetAiMealError("AI entry parsing failed. Try a shorter description.");
@@ -1511,7 +1515,9 @@ export const FoodsPage = () => {
                 type="submit"
                 disabled={
                   IsSaving ||
-                  (ShowAiMealEntry ? !AiMealTotals : SelectedFoodIds.size === 0)
+                  (ShowAiMealEntry
+                    ? !AiMealTotals || ((AiMealTotals.CaloriesPerServing ?? 0) <= 0 && (AiMealTotals.ProteinPerServing ?? 0) <= 0)
+                    : SelectedFoodIds.size === 0)
                 }
               >
                 {IsSaving ? (EditingMealId ? "Updating..." : "Creating...") : (EditingMealId ? "Update meal" : "Create meal")}

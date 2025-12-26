@@ -80,6 +80,7 @@ Rules:
 - If this is an estimate, start Summary with "AI estimate.".
 - Use ServingQuantity 1 and ServingUnit "serving".
 - Do not include extra text or markdown.
+- Keep Summary under 200 characters.
 """.strip()
 
     if KnownFoodsText:
@@ -93,7 +94,7 @@ Rules:
             {"role": "user", "content": UserPrompt}
         ],
         Temperature=0.2,
-        MaxTokens=500
+        MaxTokens=900
     )
 
     Data = _TryParseMealTotals(Content)
@@ -105,7 +106,7 @@ Rules:
                 {"role": "user", "content": Content}
             ],
             Temperature=0.1,
-            MaxTokens=300
+            MaxTokens=500
         )
         Data = _TryParseMealTotals(RetryContent)
 
@@ -139,12 +140,39 @@ Rules:
     if not Summary:
         Summary = "AI estimate." if CaloriesValue == 0 else ""
 
+    if CaloriesValue == 0 and (_to_float(Data.get("ProteinPerServing", 0)) or 0) == 0:
+        RetryPrompt = (
+            "Return ONLY the JSON object with non-zero CaloriesPerServing or ProteinPerServing. "
+            "No extra text."
+        )
+        RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
+            [
+                {"role": "system", "content": RetryPrompt},
+                {"role": "user", "content": UserPrompt}
+            ],
+            Temperature=0.1,
+            MaxTokens=1200
+        )
+        Data = _TryParseMealTotals(RetryContent)
+        if Data is None:
+            raise ValueError("Invalid AI response format.")
+        Calories = Data.get("CaloriesPerServing", 0)
+        try:
+            CaloriesValue = int(float(Calories))
+        except (TypeError, ValueError):
+            CaloriesValue = 0
+        Summary = str(Data.get("Summary", "AI estimate." if CaloriesValue == 0 else "")).strip()
+        if not Summary:
+            Summary = "AI estimate." if CaloriesValue == 0 else ""
+
+    ProteinValue = _to_float(Data.get("ProteinPerServing", 0)) or 0.0
+
     return {
         "MealName": MealName,
         "ServingQuantity": ServingQuantity,
         "ServingUnit": ServingUnit,
         "CaloriesPerServing": CaloriesValue,
-        "ProteinPerServing": _to_float(Data.get("ProteinPerServing", 0)) or 0.0,
+        "ProteinPerServing": ProteinValue,
         "FibrePerServing": _to_float(Data.get("FibrePerServing")),
         "CarbsPerServing": _to_float(Data.get("CarbsPerServing")),
         "FatPerServing": _to_float(Data.get("FatPerServing")),
