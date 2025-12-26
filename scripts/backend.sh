@@ -31,8 +31,17 @@ fi
 
 source "${VENV_DIR}/bin/activate"
 
+VENV_PYTHON="${VENV_DIR}/bin/python"
+if [[ ! -x "${VENV_PYTHON}" ]]; then
+  VENV_PYTHON="${VENV_DIR}/bin/python3"
+fi
+if [[ ! -x "${VENV_PYTHON}" ]]; then
+  echo "Virtualenv python not found in ${VENV_DIR}/bin. Remove ${VENV_DIR} and try again." >&2
+  exit 1
+fi
+
 if [[ "${SKIP_PIP_INSTALL:-0}" != "1" ]]; then
-  python3 -m pip install -r requirements.txt
+  "${VENV_PYTHON}" -m pip install -r requirements.txt
 fi
 
 mkdir -p "${DATA_DIR}"
@@ -44,4 +53,4 @@ if [[ "${1:-}" == "test" ]]; then
   exec pytest "${@:2}"
 fi
 
-uvicorn app.main:App --reload --host 0.0.0.0 --port "${API_PORT:-8000}"
+exec "${VENV_PYTHON}" -m uvicorn app.main:App --reload --host 0.0.0.0 --port "${API_PORT:-8002}"
