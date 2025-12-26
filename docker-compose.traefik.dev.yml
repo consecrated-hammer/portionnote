@@ -1,0 +1,48 @@
+# Dev deployment with Traefik (single container)
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /
+    container_name: portionnote-dev
+    restart: unless-stopped
+    env_file: .env.dev
+    environment:
+      ENVIRONMENT: production
+      API_PORT: 8001
+      WEB_ORIGIN: https://portionnote-dev.bunella.au
+      DATABASE_FILE: /data/portionnote.sqlite
+    volumes:
+      - portionnote-dev-data:/data
+    networks:
+      - traefik_proxy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_proxy"
+      - "traefik.http.routers.portionnote-dev.rule=Host(`portionnote-dev.bunella.au`) || Host(`www.portionnote-dev.bunella.au`)"
+      - "traefik.http.routers.portionnote-dev.entrypoints=websecure"
+      - "traefik.http.routers.portionnote-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.services.portionnote-dev.loadbalancer.server.port=8001"
+      - "homepage.enable=true"
+      - "homepage.name=Portion Note Dev"
+      - "homepage.href=https://portionnote-dev.bunella.au"
+      - "homepage.icon=https://portionnote-dev.bunella.au/favicon.svg"
+      - "homepage.group=Projects"
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  portionnote-dev-data:
+    driver: local
+
+networks:
+  traefik_proxy:
+    external: true
+    name: traefik_proxy
