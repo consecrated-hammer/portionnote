@@ -49,33 +49,23 @@ def test_lookup_food_by_text_no_api_key():
         Settings.OpenAiApiKey = OriginalKey
 
 
-@patch("app.services.food_lookup_service.httpx.post")
-def test_lookup_food_by_text_success(MockPost):
+@patch("app.services.food_lookup_service.GetOpenAiContent")
+def test_lookup_food_by_text_success(MockGetOpenAiContent):
     """Test successful text-based food lookup."""
-    # Mock OpenAI API response
-    MockResponse = Mock()
-    MockResponse.status_code = 200
-    MockResponse.json.return_value = {
-        "choices": [{
-            "message": {
-                "content": json.dumps({
-                    "FoodName": "Weet-Bix",
-                    "ServingQuantity": 2.0,
-                    "ServingUnit": "biscuits",
-                    "CaloriesPerServing": 136,
-                    "ProteinPerServing": 4.6,
-                    "FibrePerServing": 3.6,
-                    "CarbsPerServing": 24.0,
-                    "FatPerServing": 1.2,
-                    "SaturatedFatPerServing": 0.3,
-                    "SugarPerServing": 3.8,
-                    "SodiumPerServing": 75.0,
-                    "Confidence": "High"
-                })
-            }
-        }]
-    }
-    MockPost.return_value = MockResponse
+    MockGetOpenAiContent.return_value = json.dumps({
+        "FoodName": "Weet-Bix",
+        "ServingQuantity": 2.0,
+        "ServingUnit": "biscuits",
+        "CaloriesPerServing": 136,
+        "ProteinPerServing": 4.6,
+        "FibrePerServing": 3.6,
+        "CarbsPerServing": 24.0,
+        "FatPerServing": 1.2,
+        "SaturatedFatPerServing": 0.3,
+        "SugarPerServing": 3.8,
+        "SodiumPerServing": 75.0,
+        "Confidence": "High"
+    })
     
     Result = LookupFoodByText("weet-bix")
     
@@ -87,26 +77,17 @@ def test_lookup_food_by_text_success(MockPost):
     assert Result.Confidence == "High"
 
 
-@patch("app.services.food_lookup_service.httpx.post")
-def test_lookup_food_by_text_with_markdown_response(MockPost):
+@patch("app.services.food_lookup_service.GetOpenAiContent")
+def test_lookup_food_by_text_with_markdown_response(MockGetOpenAiContent):
     """Test text lookup handles markdown code blocks in AI response."""
-    MockResponse = Mock()
-    MockResponse.status_code = 200
-    MockResponse.json.return_value = {
-        "choices": [{
-            "message": {
-                "content": "```json\n" + json.dumps({
-                    "FoodName": "Banana",
-                    "ServingQuantity": 1.0,
-                    "ServingUnit": "medium",
-                    "CaloriesPerServing": 105,
-                    "ProteinPerServing": 1.3,
-                    "Confidence": "High"
-                }) + "\n```"
-            }
-        }]
-    }
-    MockPost.return_value = MockResponse
+    MockGetOpenAiContent.return_value = "```json\n" + json.dumps({
+        "FoodName": "Banana",
+        "ServingQuantity": 1.0,
+        "ServingUnit": "medium",
+        "CaloriesPerServing": 105,
+        "ProteinPerServing": 1.3,
+        "Confidence": "High"
+    }) + "\n```"
     
     Result = LookupFoodByText("banana")
     
@@ -114,44 +95,35 @@ def test_lookup_food_by_text_with_markdown_response(MockPost):
     assert Result.CaloriesPerServing == 105
 
 
-@patch("app.services.food_lookup_service.httpx.post")
-def test_lookup_food_by_text_options_success(MockPost):
+@patch("app.services.food_lookup_service.GetOpenAiContent")
+def test_lookup_food_by_text_options_success(MockGetOpenAiContent):
     """Test multiple AI options for text lookup."""
-    MockResponse = Mock()
-    MockResponse.status_code = 200
-    MockResponse.json.return_value = {
-        "choices": [{
-            "message": {
-                "content": json.dumps([
-                    {
-                        "FoodName": "Mocha Coffee Small",
-                        "ServingQuantity": 1.0,
-                        "ServingUnit": "small",
-                        "CaloriesPerServing": 180,
-                        "ProteinPerServing": 6.0,
-                        "Confidence": "Medium"
-                    },
-                    {
-                        "FoodName": "Mocha Coffee Medium",
-                        "ServingQuantity": 1.0,
-                        "ServingUnit": "medium",
-                        "CaloriesPerServing": 240,
-                        "ProteinPerServing": 8.0,
-                        "Confidence": "Medium"
-                    },
-                    {
-                        "FoodName": "Mocha Coffee Large",
-                        "ServingQuantity": 1.0,
-                        "ServingUnit": "large",
-                        "CaloriesPerServing": 300,
-                        "ProteinPerServing": 10.0,
-                        "Confidence": "Medium"
-                    }
-                ])
-            }
-        }]
-    }
-    MockPost.return_value = MockResponse
+    MockGetOpenAiContent.return_value = json.dumps([
+        {
+            "FoodName": "Mocha Coffee Small",
+            "ServingQuantity": 1.0,
+            "ServingUnit": "small",
+            "CaloriesPerServing": 180,
+            "ProteinPerServing": 6.0,
+            "Confidence": "Medium"
+        },
+        {
+            "FoodName": "Mocha Coffee Medium",
+            "ServingQuantity": 1.0,
+            "ServingUnit": "medium",
+            "CaloriesPerServing": 240,
+            "ProteinPerServing": 8.0,
+            "Confidence": "Medium"
+        },
+        {
+            "FoodName": "Mocha Coffee Large",
+            "ServingQuantity": 1.0,
+            "ServingUnit": "large",
+            "CaloriesPerServing": 300,
+            "ProteinPerServing": 10.0,
+            "Confidence": "Medium"
+        }
+    ])
 
     Results = LookupFoodByTextOptions("mocha coffee")
 

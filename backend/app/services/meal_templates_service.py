@@ -7,10 +7,32 @@ from app.models.schemas import (
     CreateMealEntryInput,
     MealTemplate,
     MealTemplateItem,
+    MealTemplateItemInput,
     MealTemplateWithItems
 )
 from app.services.daily_logs_service import CreateMealEntry, EnsureDailyLogForDate, GetEntriesForLog
+from app.services.serving_conversion_service import ConvertEntryToServings
 from app.utils.database import ExecuteQuery, FetchAll, FetchOne
+
+
+def _ResolveTemplateItemAmount(FoodRow: dict, Item: MealTemplateItemInput) -> tuple[float, float, str]:
+    if (Item.EntryQuantity is None) != (Item.EntryUnit is None):
+        raise ValueError("EntryQuantity and EntryUnit must be provided together.")
+
+    EntryQuantity = Item.EntryQuantity if Item.EntryQuantity is not None else Item.Quantity
+    EntryUnit = Item.EntryUnit or "serving"
+
+    if EntryUnit == "serving":
+        return EntryQuantity, EntryQuantity, EntryUnit
+
+    Quantity, _Detail, NormalizedUnit = ConvertEntryToServings(
+        FoodRow["FoodName"],
+        float(FoodRow["ServingQuantity"]) if FoodRow["ServingQuantity"] else 1.0,
+        FoodRow["ServingUnit"] or "serving",
+        EntryQuantity,
+        EntryUnit
+    )
+    return Quantity, EntryQuantity, NormalizedUnit
 
 
 def CreateMealTemplate(UserId: str, Input: CreateMealTemplateInput) -> MealTemplateWithItems:
@@ -48,14 +70,20 @@ def CreateMealTemplate(UserId: str, Input: CreateMealTemplateInput) -> MealTempl
     for Item in Input.Items:
         FoodRow = FetchOne(
             """
-            SELECT FoodId AS FoodId
+            SELECT
+                FoodId AS FoodId,
+                FoodName AS FoodName,
+                ServingQuantity AS ServingQuantity,
+                ServingUnit AS ServingUnit
             FROM Foods
-            WHERE FoodId = ? AND UserId = ?;
+            WHERE FoodId = ?;
             """,
-            [Item.FoodId, UserId]
+            [Item.FoodId]
         )
         if FoodRow is None:
             raise ValueError("Food not found.")
+
+        Quantity, EntryQuantity, EntryUnit = _ResolveTemplateItemAmount(FoodRow, Item)
 
         ExecuteQuery(
             """
@@ -65,16 +93,20 @@ def CreateMealTemplate(UserId: str, Input: CreateMealTemplateInput) -> MealTempl
                 FoodId,
                 MealType,
                 Quantity,
+                EntryQuantity,
+                EntryUnit,
                 EntryNotes,
                 SortOrder
-            ) VALUES (?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
             """,
             [
                 str(uuid.uuid4()),
                 MealTemplateId,
                 Item.FoodId,
                 Item.MealType,
-                Item.Quantity,
+                Quantity,
+                EntryQuantity,
+                EntryUnit,
                 Item.EntryNotes,
                 Item.SortOrder
             ]
@@ -106,6 +138,8 @@ def GetMealTemplate(UserId: str, MealTemplateId: str) -> MealTemplateWithItems:
             MealTemplateItems.FoodId AS FoodId,
             MealTemplateItems.MealType AS MealType,
             MealTemplateItems.Quantity AS Quantity,
+            MealTemplateItems.EntryQuantity AS EntryQuantity,
+            MealTemplateItems.EntryUnit AS EntryUnit,
             MealTemplateItems.EntryNotes AS EntryNotes,
             MealTemplateItems.SortOrder AS SortOrder,
             Foods.FoodName AS FoodName,
@@ -132,6 +166,8 @@ def GetMealTemplate(UserId: str, MealTemplateId: str) -> MealTemplateWithItems:
             FoodId=Row["FoodId"],
             MealType=Row["MealType"],
             Quantity=float(Row["Quantity"]),
+            EntryQuantity=float(Row["EntryQuantity"]) if Row.get("EntryQuantity") is not None else None,
+            EntryUnit=Row.get("EntryUnit"),
             EntryNotes=Row["EntryNotes"],
             SortOrder=int(Row["SortOrder"]),
             FoodName=Row["FoodName"],
@@ -170,6 +206,8 @@ def GetMealTemplates(UserId: str) -> list[MealTemplateWithItems]:
             MealTemplateItems.FoodId AS FoodId,
             MealTemplateItems.MealType AS MealType,
             MealTemplateItems.Quantity AS Quantity,
+            MealTemplateItems.EntryQuantity AS EntryQuantity,
+            MealTemplateItems.EntryUnit AS EntryUnit,
             MealTemplateItems.EntryNotes AS EntryNotes,
             MealTemplateItems.SortOrder AS SortOrder,
             Foods.FoodName AS FoodName,
@@ -191,6 +229,8 @@ def GetMealTemplates(UserId: str) -> list[MealTemplateWithItems]:
             FoodId=Row["FoodId"],
             MealType=Row["MealType"],
             Quantity=float(Row["Quantity"]),
+            EntryQuantity=float(Row["EntryQuantity"]) if Row.get("EntryQuantity") is not None else None,
+            EntryUnit=Row.get("EntryUnit"),
             EntryNotes=Row["EntryNotes"],
             SortOrder=int(Row["SortOrder"]),
             FoodName=Row["FoodName"],
@@ -211,17 +251,34 @@ def GetMealTemplates(UserId: str) -> list[MealTemplateWithItems]:
     return Templates
 
 
-def DeleteMealTemplate(UserId: str, MealTemplateId: str) -> None:
-    Row = FetchOne(
-        """
-        SELECT MealTemplateId AS MealTemplateId
-        FROM MealTemplates
-        WHERE MealTemplateId = ? AND UserId = ?;
-        """,
-        [MealTemplateId, UserId]
-    )
+def _FetchMealTemplateRow(UserId: str, MealTemplateId: str, IsAdmin: bool) -> dict:
+    if IsAdmin:
+        Row = FetchOne(
+            """
+            SELECT MealTemplateId AS MealTemplateId, UserId AS UserId
+            FROM MealTemplates
+            WHERE MealTemplateId = ?;
+            """,
+            [MealTemplateId]
+        )
+    else:
+        Row = FetchOne(
+            """
+            SELECT MealTemplateId AS MealTemplateId, UserId AS UserId
+            FROM MealTemplates
+            WHERE MealTemplateId = ? AND UserId = ?;
+            """,
+            [MealTemplateId, UserId]
+        )
+
     if Row is None:
         raise ValueError("Template not found.")
+
+    return Row
+
+
+def DeleteMealTemplate(UserId: str, MealTemplateId: str, IsAdmin: bool = False) -> None:
+    _FetchMealTemplateRow(UserId, MealTemplateId, IsAdmin)
 
     ExecuteQuery(
         "DELETE FROM MealTemplates WHERE MealTemplateId = ?;",
@@ -229,18 +286,15 @@ def DeleteMealTemplate(UserId: str, MealTemplateId: str) -> None:
     )
 
 
-def UpdateMealTemplate(UserId: str, MealTemplateId: str, Input: UpdateMealTemplateInput) -> MealTemplateWithItems:
+def UpdateMealTemplate(
+    UserId: str,
+    MealTemplateId: str,
+    Input: UpdateMealTemplateInput,
+    IsAdmin: bool = False
+) -> MealTemplateWithItems:
     # Verify template exists and user owns it
-    Row = FetchOne(
-        """
-        SELECT MealTemplateId AS MealTemplateId
-        FROM MealTemplates
-        WHERE MealTemplateId = ? AND UserId = ?;
-        """,
-        [MealTemplateId, UserId]
-    )
-    if Row is None:
-        raise ValueError("Template not found.")
+    Row = _FetchMealTemplateRow(UserId, MealTemplateId, IsAdmin)
+    OwnerUserId = Row["UserId"]
 
     # Update template name if provided
     if Input.TemplateName is not None:
@@ -255,7 +309,7 @@ def UpdateMealTemplate(UserId: str, MealTemplateId: str, Input: UpdateMealTempla
             FROM MealTemplates
             WHERE UserId = ? AND TemplateName = ? AND MealTemplateId != ?;
             """,
-            [UserId, TemplateName, MealTemplateId]
+            [OwnerUserId, TemplateName, MealTemplateId]
         )
         if Existing is not None:
             raise ValueError("Template name already exists.")
@@ -280,14 +334,20 @@ def UpdateMealTemplate(UserId: str, MealTemplateId: str, Input: UpdateMealTempla
         for Item in Input.Items:
             FoodRow = FetchOne(
                 """
-                SELECT FoodId AS FoodId
+                SELECT
+                    FoodId AS FoodId,
+                    FoodName AS FoodName,
+                    ServingQuantity AS ServingQuantity,
+                    ServingUnit AS ServingUnit
                 FROM Foods
-                WHERE FoodId = ? AND UserId = ?;
+                WHERE FoodId = ?;
                 """,
-                [Item.FoodId, UserId]
+                [Item.FoodId]
             )
             if FoodRow is None:
                 raise ValueError("Food not found.")
+
+            Quantity, EntryQuantity, EntryUnit = _ResolveTemplateItemAmount(FoodRow, Item)
 
             ExecuteQuery(
                 """
@@ -297,28 +357,29 @@ def UpdateMealTemplate(UserId: str, MealTemplateId: str, Input: UpdateMealTempla
                     FoodId,
                     MealType,
                     Quantity,
+                    EntryQuantity,
+                    EntryUnit,
                     EntryNotes,
                     SortOrder
-                ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 [
                     str(uuid.uuid4()),
                     MealTemplateId,
                     Item.FoodId,
                     Item.MealType,
-                    Item.Quantity,
+                    Quantity,
+                    EntryQuantity,
+                    EntryUnit,
                     Item.EntryNotes,
                     Item.SortOrder
                 ]
             )
 
-    return GetMealTemplate(UserId, MealTemplateId)
+    return GetMealTemplate(OwnerUserId, MealTemplateId)
 
 
 def ApplyMealTemplate(UserId: str, MealTemplateId: str, LogDate: str) -> ApplyMealTemplateResponse:
-    from app.utils.database import ExecuteQuery
-    import uuid
-    
     Template = GetMealTemplate(UserId, MealTemplateId)
     DailyLogItem = EnsureDailyLogForDate(UserId, LogDate)
     ExistingEntries = GetEntriesForLog(UserId, DailyLogItem.DailyLogId)
@@ -329,28 +390,19 @@ def ApplyMealTemplate(UserId: str, MealTemplateId: str, LogDate: str) -> ApplyMe
 
     CreatedCount = 0
     for Index, Item in enumerate(Template.Items):
-        MealEntryId = str(uuid.uuid4())
-        ExecuteQuery(
-            """
-            INSERT INTO MealEntries (
-                MealEntryId,
-                DailyLogId,
-                MealType,
-                FoodId,
-                Quantity,
-                EntryNotes,
-                SortOrder
-            ) VALUES (?, ?, ?, ?, ?, ?, ?);
-            """,
-            [
-                MealEntryId,
-                DailyLogItem.DailyLogId,
-                Item.MealType,
-                Item.FoodId,
-                Item.Quantity,
-                Item.EntryNotes,
-                NextSortOrder + Index
-            ]
+        CreateMealEntry(
+            UserId,
+            CreateMealEntryInput(
+                DailyLogId=DailyLogItem.DailyLogId,
+                MealType=Item.MealType,
+                FoodId=Item.FoodId,
+                Quantity=Item.Quantity,
+                EntryQuantity=Item.EntryQuantity,
+                EntryUnit=Item.EntryUnit,
+                EntryNotes=Item.EntryNotes,
+                SortOrder=NextSortOrder + Index,
+                ScheduleSlotId=None
+            )
         )
         CreatedCount += 1
 

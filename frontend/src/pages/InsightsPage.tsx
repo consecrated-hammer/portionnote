@@ -24,6 +24,7 @@ export const InsightsPage = () => {
   const [AiSuggestions, SetAiSuggestions] = useState<AiSuggestion[]>([]);
   const [AiStatus, SetAiStatus] = useState<"idle" | "loading" | "error">("idle");
   const [AiError, SetAiError] = useState<string | null>(null);
+  const [AiModelUsed, SetAiModelUsed] = useState<string | null>(null);
   const MaxValue = Math.max(...Bars.map((Bar) => Bar.Value));
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export const InsightsPage = () => {
       try {
         const Response = await GetAiSuggestions(Today);
         SetAiSuggestions(Response.Suggestions);
+        SetAiModelUsed(Response.ModelUsed ?? null);
         SetAiStatus("idle");
       } catch (ErrorValue) {
         SetAiStatus("error");
@@ -90,6 +92,9 @@ export const InsightsPage = () => {
 
       <div className="Card space-y-4">
         <h3 className="Headline text-xl">AI suggestions</h3>
+        {AiModelUsed && AiStatus !== "error" && (
+          <p className="text-xs text-Ink/60">Model used: {AiModelUsed}</p>
+        )}
         {AiStatus === "loading" && (
           <p className="text-sm text-Ink/70">Loading suggestions...</p>
         )}

@@ -10,6 +10,7 @@ Portion Note is a friendly, mobile-first tracker for meals, steps, and weight. I
 - Save favourite foods and reuse meal templates
 - Get simple, practical suggestion nudges
 - AI assisted food lookup and portion options when the database has no match
+- Shared food library across users with owner-only editing
 - View weekly summaries Monday to Sunday
 
 ## What to expect

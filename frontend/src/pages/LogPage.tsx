@@ -49,6 +49,11 @@ const GetMealLabel = (Value: MealType) => {
   return Match ? Match.Label : Value;
 };
 
+const FormatAmount = (Value: number) => {
+  if (Number.isInteger(Value)) return Value.toString();
+  return Value.toFixed(2).replace(/\.?0+$/, "");
+};
+
 const FormatToday = () => new Date().toISOString().slice(0, 10);
 const IsValidDate = (Value: string | null) => !!Value && /^\d{4}-\d{2}-\d{2}$/.test(Value);
 
@@ -205,12 +210,11 @@ export const LogPage = () => {
       return DailyLogItem;
     }
 
-    const StepsValue = Number(StepsInput || 0);
-    await CreateDailyLog(LogDate, Number.isFinite(StepsValue) ? StepsValue : 0);
+    const StepsValue = 0;
+    await CreateDailyLog(LogDate, StepsValue);
     const Response = await GetDailyLog(LogDate);
     SetDailyLogItem(Response.DailyLog);
     SetEntries(Response.Entries);
-    SetStepsInput(Response.DailyLog.Steps.toString());
     return Response.DailyLog;
   };
 
@@ -359,13 +363,15 @@ export const LogPage = () => {
             ReturnToLog
             ReturnDate={LogDate}
             PreselectedFoodId={SelectedFoodId ?? undefined}
-            OnSubmit={async (FoodId, MealType, Quantity) => {
+            OnSubmit={async (FoodId, MealType, EntryQuantity, EntryUnit) => {
               const Log = await EnsureLog();
               await CreateMealEntry({
                 DailyLogId: Log.DailyLogId,
                 MealType,
                 FoodId,
-                Quantity,
+                Quantity: EntryQuantity,
+                EntryQuantity,
+                EntryUnit,
                 EntryNotes: null,
                 SortOrder: Entries.length,
                 ScheduleSlotId: null
@@ -421,6 +427,11 @@ export const LogPage = () => {
                     {MealEntries.map((Entry) => {
                       const EntryCalories = Math.round(Entry.CaloriesPerServing * Entry.Quantity);
                       const EntryProtein = (Entry.ProteinPerServing * Entry.Quantity).toFixed(1);
+                      const EntryAmount = Entry.EntryQuantity ?? Entry.Quantity;
+                      const EntryUnit = Entry.EntryUnit ?? "serving";
+                      const EntryLine = EntryUnit === "serving"
+                        ? `${FormatAmount(EntryAmount)} × ${Entry.ServingDescription}`
+                        : `${FormatAmount(EntryAmount)} ${EntryUnit}`;
                       
                       return (
                         <div
@@ -431,7 +442,12 @@ export const LogPage = () => {
                             <p className="font-semibold text-sm truncate">{Entry.FoodName}</p>
                             {!Entry.MealTemplateId && (
                               <p className="text-xs text-Ink/60 mt-0.5">
-                                {Entry.Quantity} × {Entry.ServingDescription}
+                                {EntryLine}
+                              </p>
+                            )}
+                            {!Entry.MealTemplateId && Entry.ConversionDetail && EntryUnit !== "serving" && (
+                              <p className="text-xs text-Ink/50 mt-0.5">
+                                {Entry.ConversionDetail}
                               </p>
                             )}
                             <p className="text-xs text-Ink/60 mt-0.5">

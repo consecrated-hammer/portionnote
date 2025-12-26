@@ -5,9 +5,8 @@ import json
 from datetime import datetime
 from typing import Optional
 
-import httpx
-
 from app.config import Settings
+from app.services.openai_client import GetOpenAiContentWithModel
 
 
 class NutritionRecommendation:
@@ -60,12 +59,40 @@ def CalculateAge(BirthDate: str) -> int:
     return Age
 
 
+def _TryParseRecommendationJson(Content: str) -> Optional[dict]:
+    Cleaned = Content.strip()
+    if "```json" in Cleaned:
+        Cleaned = Cleaned.split("```json")[1].split("```")[0].strip()
+    elif "```" in Cleaned:
+        Cleaned = Cleaned.split("```")[1].split("```")[0].strip()
+
+    try:
+        Parsed = json.loads(Cleaned)
+        if isinstance(Parsed, dict):
+            return Parsed
+    except json.JSONDecodeError:
+        pass
+
+    Start = Cleaned.find("{")
+    End = Cleaned.rfind("}")
+    if Start != -1 and End != -1 and End > Start:
+        Candidate = Cleaned[Start:End + 1]
+        try:
+            Parsed = json.loads(Candidate)
+            if isinstance(Parsed, dict):
+                return Parsed
+        except json.JSONDecodeError:
+            return None
+
+    return None
+
+
 def GetAiNutritionRecommendations(
     Age: int,
     HeightCm: int,
     WeightKg: float,
     ActivityLevel: str
-) -> NutritionRecommendation:
+) -> tuple[NutritionRecommendation, str]:
     """
     Get personalized nutrition recommendations from AI based on user profile.
     
@@ -118,48 +145,50 @@ Base your recommendations on:
 
 Provide personalized daily nutrition targets."""
 
-    Payload = {
-        "model": Settings.OpenAiModel,
-        "messages": [
+    Content, ModelUsed = GetOpenAiContentWithModel(
+        [
             {"role": "system", "content": SystemPrompt},
             {"role": "user", "content": UserPrompt}
         ],
-        "temperature": 0.3,
-        "max_tokens": 600
-    }
-
-    Headers = {
-        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-        "Content-Type": "application/json"
-    }
-
-    Response = httpx.post(
-        Settings.OpenAiBaseUrl,
-        headers=Headers,
-        json=Payload,
-        timeout=30.0
+        Temperature=0.3,
+        MaxTokens=900
     )
-    Response.raise_for_status()
-    
-    Data = Response.json()
-    Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
     
     if not Content:
-        raise ValueError("No response from AI.")
+        RetryContent, RetryModelUsed = GetOpenAiContentWithModel(
+            [
+                {"role": "system", "content": SystemPrompt},
+                {"role": "user", "content": UserPrompt}
+            ],
+            Temperature=0.1,
+            MaxTokens=1200
+        )
+        Content = RetryContent
+        ModelUsed = RetryModelUsed
+        if not Content:
+            raise ValueError("No response from AI.")
 
-    # Parse JSON response
-    try:
-        # Handle markdown code blocks if present
-        if "```json" in Content:
-            Content = Content.split("```json")[1].split("```")[0].strip()
-        elif "```" in Content:
-            Content = Content.split("```")[1].split("```")[0].strip()
-        
-        RecommendationData = json.loads(Content)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Invalid AI response format: {e}")
+    RecommendationData = _TryParseRecommendationJson(Content)
+    if RecommendationData is None:
+        RetrySystemPrompt = (
+            "You are a formatter. Return ONLY valid JSON with the required fields. "
+            "Do not include extra text. Explanation must not contain double quotes."
+        )
+        RetryUserPrompt = f"Reformat this into valid JSON only:\n{Content}"
+        RetryContent, RetryModelUsed = GetOpenAiContentWithModel(
+            [
+                {"role": "system", "content": RetrySystemPrompt},
+                {"role": "user", "content": RetryUserPrompt}
+            ],
+            Temperature=0.1,
+            MaxTokens=400
+        )
+        RecommendationData = _TryParseRecommendationJson(RetryContent)
+        if RecommendationData is None:
+            raise ValueError("Invalid AI response format.")
+        ModelUsed = RetryModelUsed
 
-    return NutritionRecommendation(
+    Recommendation = NutritionRecommendation(
         DailyCalorieTarget=int(RecommendationData.get("DailyCalorieTarget", 2000)),
         ProteinTargetMin=float(RecommendationData.get("ProteinTargetMin", 60)),
         ProteinTargetMax=float(RecommendationData.get("ProteinTargetMax", 120)),
@@ -171,3 +200,4 @@ Provide personalized daily nutrition targets."""
         SodiumTarget=float(RecommendationData.get("SodiumTarget", 2300)) if RecommendationData.get("SodiumTarget") else None,
         Explanation=RecommendationData.get("Explanation", "Personalized recommendations based on your profile.")
     )
+    return Recommendation, ModelUsed

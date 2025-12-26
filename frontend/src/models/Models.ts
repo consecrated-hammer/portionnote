@@ -1,5 +1,6 @@
 export type Food = {
   FoodId: string;
+  OwnerUserId?: string | null;
   FoodName: string;
   ServingDescription: string;  // Deprecated
   ServingQuantity: number;
@@ -48,6 +49,9 @@ export type MealEntryWithFood = {
   SugarPerServing?: number | null;
   SodiumPerServing?: number | null;
   Quantity: number;
+  EntryQuantity?: number | null;
+  EntryUnit?: string | null;
+  ConversionDetail?: string | null;
   EntryNotes?: string | null;
   SortOrder: number;
   ScheduleSlotId?: string | null;
@@ -134,6 +138,28 @@ export type User = {
   IsAdmin: boolean;
 };
 
+export type AdminUser = {
+  UserId: string;
+  Email: string;
+  FirstName?: string | null;
+  LastName?: string | null;
+  AuthProvider: string;
+  IsAdmin: boolean;
+  CreatedAt?: string | null;
+};
+
+export type AdminUserListResponse = {
+  Users: AdminUser[];
+};
+
+export type AdminUserCreateInput = {
+  Email: string;
+  Password: string;
+  FirstName: string;
+  LastName?: string;
+  IsAdmin: boolean;
+};
+
 export type UpdateProfileInput = {
   FirstName?: string;
   LastName?: string;
@@ -185,6 +211,8 @@ export type MealTemplateItem = {
   FoodId: string;
   MealType: MealType;
   Quantity: number;
+  EntryQuantity?: number;
+  EntryUnit?: string;
   EntryNotes?: string | null;
   SortOrder: number;
   FoodName: string;
@@ -200,6 +228,21 @@ export type MealTemplateListResponse = {
   Templates: MealTemplateWithItems[];
 };
 
+export type MealTextParseResponse = {
+  MealName: string;
+  ServingQuantity: number;
+  ServingUnit: string;
+  CaloriesPerServing: number;
+  ProteinPerServing: number;
+  FibrePerServing?: number;
+  CarbsPerServing?: number;
+  FatPerServing?: number;
+  SaturatedFatPerServing?: number;
+  SugarPerServing?: number;
+  SodiumPerServing?: number;
+  Summary: string;
+};
+
 export type AiSuggestion = {
   SuggestionType: string;
   Title: string;
@@ -208,6 +251,7 @@ export type AiSuggestion = {
 
 export type AiSuggestionResponse = {
   Suggestions: AiSuggestion[];
+  ModelUsed?: string;
 };
 
 export type ScheduleSlot = {
@@ -246,4 +290,5 @@ export type NutritionRecommendation = {
   SugarTarget?: number;
   SodiumTarget?: number;
   Explanation: string;
+  ModelUsed?: string;
 };

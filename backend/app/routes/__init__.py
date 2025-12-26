@@ -9,6 +9,7 @@ from app.routes.ai_suggestions import AiSuggestionRouter
 from app.routes.schedule import ScheduleRouter
 from app.routes.settings import SettingsRouter
 from app.routes.logs import LogRouter
+from app.routes.admin_users import AdminUserRouter
 
 __all__ = [
     "AuthRouter",
@@ -21,5 +22,6 @@ __all__ = [
     "AiSuggestionRouter",
     "ScheduleRouter",
     "SettingsRouter",
-    "LogRouter"
+    "LogRouter",
+    "AdminUserRouter"
 ]

@@ -8,16 +8,15 @@ def GetFoods(UserId: str) -> list[Food]:
     Rows = FetchAll(
         """
         SELECT
+            UserId,
             FoodId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
             CaloriesPerServing, ProteinPerServing,
             FibrePerServing, CarbsPerServing, FatPerServing,
             SaturatedFatPerServing, SugarPerServing, SodiumPerServing,
             DataSource, CountryCode, IsFavourite, CreatedAt
         FROM Foods
-        WHERE UserId = ?
         ORDER BY FoodName ASC;
-        """,
-        [UserId]
+        """
     )
 
     Foods: list[Food] = []
@@ -25,6 +24,7 @@ def GetFoods(UserId: str) -> list[Food]:
         Foods.append(
             Food(
                 FoodId=Row["FoodId"],
+                OwnerUserId=Row["UserId"],
                 FoodName=Row["FoodName"],
                 ServingDescription=Row["ServingDescription"],
                 ServingQuantity=float(Row["ServingQuantity"]) if Row["ServingQuantity"] else 1.0,
@@ -93,7 +93,7 @@ def UpsertFood(UserId: str, Input: CreateFoodInput) -> Food:
     Row = FetchOne(
         """
         SELECT
-            FoodId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
+            FoodId, UserId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
             CaloriesPerServing, ProteinPerServing,
             FibrePerServing, CarbsPerServing, FatPerServing,
             SaturatedFatPerServing, SugarPerServing, SodiumPerServing,
@@ -109,6 +109,7 @@ def UpsertFood(UserId: str, Input: CreateFoodInput) -> Food:
 
     return Food(
         FoodId=Row["FoodId"],
+        OwnerUserId=Row["UserId"],
         FoodName=Row["FoodName"],
         ServingDescription=Row["ServingDescription"],
         ServingQuantity=float(Row["ServingQuantity"]) if Row["ServingQuantity"] else 1.0,
@@ -127,7 +128,7 @@ def UpsertFood(UserId: str, Input: CreateFoodInput) -> Food:
     )
 
 
-def UpdateFood(UserId: str, FoodId: str, Input: UpdateFoodInput) -> Food:
+def UpdateFood(UserId: str, FoodId: str, Input: UpdateFoodInput, IsAdmin: bool = False) -> Food:
     # Get existing food to verify ownership
     ExistingRow = FetchOne(
         "SELECT UserId FROM Foods WHERE FoodId = ?;",
@@ -137,7 +138,7 @@ def UpdateFood(UserId: str, FoodId: str, Input: UpdateFoodInput) -> Food:
     if ExistingRow is None:
         raise ValueError("Food not found")
     
-    if ExistingRow["UserId"] != UserId:
+    if ExistingRow["UserId"] != UserId and not IsAdmin:
         raise ValueError("Unauthorized")
     
     # Build update query dynamically based on provided fields
@@ -215,15 +216,15 @@ def GetFoodById(UserId: str, FoodId: str) -> Food:
     Row = FetchOne(
         """
         SELECT
-            FoodId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
+            FoodId, UserId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
             CaloriesPerServing, ProteinPerServing,
             FibrePerServing, CarbsPerServing, FatPerServing,
             SaturatedFatPerServing, SugarPerServing, SodiumPerServing,
             DataSource, CountryCode, IsFavourite
         FROM Foods
-        WHERE FoodId = ? AND UserId = ?;
+        WHERE FoodId = ?;
         """,
-        [FoodId, UserId]
+        [FoodId]
     )
     
     if Row is None:
@@ -231,6 +232,7 @@ def GetFoodById(UserId: str, FoodId: str) -> Food:
     
     return Food(
         FoodId=Row["FoodId"],
+        OwnerUserId=Row["UserId"],
         FoodName=Row["FoodName"],
         ServingDescription=Row["ServingDescription"],
         ServingQuantity=float(Row["ServingQuantity"]) if Row["ServingQuantity"] else 1.0,
@@ -249,7 +251,7 @@ def GetFoodById(UserId: str, FoodId: str) -> Food:
     )
 
 
-def DeleteFood(UserId: str, FoodId: str) -> None:
+def DeleteFood(UserId: str, FoodId: str, IsAdmin: bool = False) -> None:
     # Verify ownership
     ExistingRow = FetchOne(
         "SELECT UserId FROM Foods WHERE FoodId = ?;",
@@ -259,7 +261,7 @@ def DeleteFood(UserId: str, FoodId: str) -> None:
     if ExistingRow is None:
         raise ValueError("Food not found")
     
-    if ExistingRow["UserId"] != UserId:
+    if ExistingRow["UserId"] != UserId and not IsAdmin:
         raise ValueError("Unauthorized")
 
     MealEntryCount = FetchOne(

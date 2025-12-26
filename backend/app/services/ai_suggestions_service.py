@@ -1,10 +1,9 @@
 import json
 
-import httpx
-
 from app.config import Settings
 from app.models.schemas import Suggestion
 from app.services.daily_logs_service import GetDailyLogByDate, GetEntriesForLog, GetSettings
+from app.services.openai_client import GetOpenAiContentWithModel
 
 
 def BuildAiPrompt(LogDate: str, Steps: int, Entries: list[dict], Targets: dict) -> str:
@@ -55,7 +54,7 @@ def ParseAiSuggestions(Content: str) -> list[Suggestion]:
     return Suggestions
 
 
-def GetAiSuggestions(UserId: str, LogDate: str) -> list[Suggestion]:
+def GetAiSuggestions(UserId: str, LogDate: str) -> tuple[list[Suggestion], str]:
     if not Settings.OpenAiApiKey:
         raise ValueError("OpenAI API key not configured.")
 
@@ -85,9 +84,8 @@ def GetAiSuggestions(UserId: str, LogDate: str) -> list[Suggestion]:
 
     Prompt = BuildAiPrompt(LogDate, LogItem.Steps, PayloadEntries, TargetsPayload)
 
-    Payload = {
-        "model": Settings.OpenAiModel,
-        "messages": [
+    Content, ModelUsed = GetOpenAiContentWithModel(
+        [
             {
                 "role": "system",
                 "content": (
@@ -97,24 +95,9 @@ def GetAiSuggestions(UserId: str, LogDate: str) -> list[Suggestion]:
             },
             {"role": "user", "content": Prompt}
         ],
-        "temperature": 0.4
-    }
-
-    Headers = {
-        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-        "Content-Type": "application/json"
-    }
-
-    Response = httpx.post(
-        Settings.OpenAiBaseUrl,
-        headers=Headers,
-        json=Payload,
-        timeout=20.0
+        Temperature=0.4
     )
-    Response.raise_for_status()
-    Data = Response.json()
-    Content = Data.get("choices", [{}])[0].get("message", {}).get("content")
     if not Content:
         raise ValueError("No AI response content.")
 
-    return ParseAiSuggestions(Content)
+    return ParseAiSuggestions(Content), ModelUsed

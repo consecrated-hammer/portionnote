@@ -9,6 +9,11 @@ from typing import Optional
 import httpx
 
 from app.config import Settings
+from app.services.openai_client import (
+    GetOpenAiContent,
+    GetOpenAiContentForModel,
+    GetOpenAiContentWithModel
+)
 from app.utils.logger import GetLogger
 
 Logger = GetLogger("food_lookup_service")
@@ -77,6 +82,21 @@ def ParseLookupJson(Content: str) -> object:
     try:
         return json.loads(Content)
     except json.JSONDecodeError as ErrorValue:
+        Cleaned = Content.strip()
+        ListStart = Cleaned.find("[")
+        ListEnd = Cleaned.rfind("]")
+        ObjStart = Cleaned.find("{")
+        ObjEnd = Cleaned.rfind("}")
+        Candidate = ""
+        if ListStart != -1 and ListEnd != -1 and ListEnd > ListStart:
+            Candidate = Cleaned[ListStart:ListEnd + 1]
+        elif ObjStart != -1 and ObjEnd != -1 and ObjEnd > ObjStart:
+            Candidate = Cleaned[ObjStart:ObjEnd + 1]
+        if Candidate:
+            try:
+                return json.loads(Candidate)
+            except json.JSONDecodeError:
+                pass
         raise ValueError(f"Invalid AI response format: {ErrorValue}") from ErrorValue
 
 
@@ -164,31 +184,14 @@ Serving size rules:
 
 Use standard serving sizes. Be precise with nutritional values based on USDA or Australian food databases."""
 
-    Payload = {
-        "model": Settings.OpenAiModel,
-        "messages": [
+    Content = GetOpenAiContent(
+        [
             {"role": "system", "content": SystemPrompt},
             {"role": "user", "content": f"Look up nutritional information for: {Query}"}
         ],
-        "temperature": 0.3,
-        "max_tokens": 500
-    }
-
-    Headers = {
-        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-        "Content-Type": "application/json"
-    }
-
-    Response = httpx.post(
-        Settings.OpenAiBaseUrl,
-        headers=Headers,
-        json=Payload,
-        timeout=30.0
+        Temperature=0.3,
+        MaxTokens=500
     )
-    Response.raise_for_status()
-    
-    Data = Response.json()
-    Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
     FoodData = ParseLookupJson(Content)
     if isinstance(FoodData, list):
         if not FoodData:
@@ -236,32 +239,34 @@ Serving size rules:
 
 When size variants exist for menu items or branded meals, include small, medium, and large entries. Otherwise return the most common measurable serving sizes."""
 
-    Payload = {
-        "model": Settings.OpenAiModel,
-        "messages": [
+    Content = GetOpenAiContent(
+        [
             {"role": "system", "content": SystemPrompt},
             {"role": "user", "content": f"Look up nutritional information for: {Query}"}
         ],
-        "temperature": 0.3,
-        "max_tokens": 700
-    }
-
-    Headers = {
-        "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-        "Content-Type": "application/json"
-    }
-
-    Response = httpx.post(
-        Settings.OpenAiBaseUrl,
-        headers=Headers,
-        json=Payload,
-        timeout=30.0
+        Temperature=0.3,
+        MaxTokens=700
     )
-    Response.raise_for_status()
-
-    Data = Response.json()
-    Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
-    FoodData = ParseLookupJson(Content)
+    try:
+        FoodData = ParseLookupJson(Content)
+    except ValueError:
+        RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
+            [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a formatter. Return ONLY a JSON array of 1-3 objects "
+                        "with the required fields. No extra text."
+                    )
+                },
+                {"role": "user", "content": Content}
+            ],
+            Temperature=0.1,
+            MaxTokens=400
+        )
+        FoodData = ParseLookupJson(RetryContent)
+    if not isinstance(FoodData, (dict, list)):
+        raise ValueError("Invalid AI response format.")
 
     if isinstance(FoodData, dict):
         FoodData = [FoodData]
@@ -491,71 +496,95 @@ def SearchAustralianFoodSuggestions(Query: str, Limit: int = 10) -> list[str]:
     if not Settings.OpenAiApiKey or len(Query) < 2:
         return []
 
-    SystemPrompt = """You are a food search assistant specializing in Australian foods and brands.
-Given a partial food name, suggest complete Australian food items that match.
+    Limit = min(Limit, 5)
 
-PRIORITY ORDER:
-1. Popular Australian brands (Tim Tams, Arnott's, Vegemite, Shapes, Milo, etc.)
-2. Common Australian food products
-3. Generic foods available in Australia
-4. Fresh produce and common ingredients
+    SystemPrompt = """You are a food search assistant specialising in Australian foods and brands.
 
-Return ONLY a JSON array of string suggestions, ordered by relevance.
-Be specific with product names and brands where possible.
-Maximum 10 suggestions.
+Input will be a single, messy line describing ONE meal/order (combined), possibly with typos and informal wording.
 
-Example for "tim":
-["Tim Tam Original", "Tim Tam Dark Chocolate", "Tim Tam Chewy Caramel"]
+Task:
+- Infer the best matching Australian food entry for the entire line as one combined order (do not split into individual ingredients/items).
+- Prefer Australian brands and menus (eg Hungry Jack's AU, Macca's AU, KFC AU, Sanitarium, Arnott's).
+- Be robust to spelling mistakes.
+- Preserve key qualifiers when present (eg Large/Medium/Small, lite/skim, flavour, meal/combo, shake, sundae).
+- Do not invent specific products. If an exact branded match is unclear, return a generic combined description that is still plausible in Australia.
 
-Example for "veg":
-["Vegemite", "Vegetables Mixed Frozen", "Vegetable Oil"]"""
+Output:
+Return ONLY a JSON array of strings, ordered by relevance, max 5.
+- If size is specified, return exactly 1 suggestion reflecting that size.
+- If size is NOT specified and size variants commonly exist, return 2-3 suggestions varying only by size (eg Small/Medium/Large), keeping all other details the same.
+No explanations. No extra fields."""
 
-    UserPrompt = f'Suggest Australian foods matching: "{Query}"'
+    UserPrompt = Query.strip()
+
+    def TryParseSuggestions(ContentValue: str) -> list[str] | None:
+        if not ContentValue:
+            return None
+        Cleaned = ContentValue.strip()
+        if "```json" in Cleaned:
+            Cleaned = Cleaned.split("```json")[1].split("```")[0].strip()
+        elif "```" in Cleaned:
+            Cleaned = Cleaned.split("```")[1].split("```")[0].strip()
+        try:
+            Parsed = json.loads(Cleaned)
+            if isinstance(Parsed, list):
+                return [str(Item) for Item in Parsed]
+        except json.JSONDecodeError:
+            pass
+        Start = Cleaned.find("[")
+        End = Cleaned.rfind("]")
+        if Start != -1 and End != -1 and End > Start:
+            Candidate = Cleaned[Start:End + 1]
+            try:
+                Parsed = json.loads(Candidate)
+                if isinstance(Parsed, list):
+                    return [str(Item) for Item in Parsed]
+            except json.JSONDecodeError:
+                return None
+        return None
 
     try:
-        Payload = {
-            "model": Settings.OpenAiModel,
-            "messages": [
-                {"role": "system", "content": SystemPrompt},
-                {"role": "user", "content": UserPrompt}
-            ],
-            "temperature": 0.5,
-            "max_tokens": 300
-        }
+        AutosuggestModel = Settings.OpenAiAutosuggestModel or "gpt-5-mini"
+        try:
+            Content, _ModelUsed = GetOpenAiContentForModel(
+                AutosuggestModel,
+                [
+                    {"role": "system", "content": SystemPrompt},
+                    {"role": "user", "content": UserPrompt}
+                ],
+                Temperature=0.4,
+                MaxTokens=200
+            )
+        except Exception:
+            Content, _ModelUsed = GetOpenAiContentWithModel(
+                [
+                    {"role": "system", "content": SystemPrompt},
+                    {"role": "user", "content": UserPrompt}
+                ],
+                Temperature=0.4,
+                MaxTokens=200
+            )
 
-        Headers = {
-            "Authorization": f"Bearer {Settings.OpenAiApiKey}",
-            "Content-Type": "application/json"
-        }
-
-        Response = httpx.post(
-            Settings.OpenAiBaseUrl,
-            headers=Headers,
-            json=Payload,
-            timeout=15.0
-        )
-        Response.raise_for_status()
-        
-        Data = Response.json()
-        Content = Data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        
-        if not Content:
-            return []
-        
-        # Extract JSON from markdown code blocks if present
-        if "```json" in Content:
-            Content = Content.split("```json")[1].split("```")[0].strip()
-        elif "```" in Content:
-            Content = Content.split("```")[1].split("```")[0].strip()
-        
-        Suggestions = json.loads(Content)
-        
+        Suggestions = TryParseSuggestions(Content)
+        if Suggestions is None:
+            RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
+                [
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a formatter. Return ONLY a JSON array of strings. "
+                            "No extra text."
+                        )
+                    },
+                    {"role": "user", "content": Content}
+                ],
+                Temperature=0.1,
+                MaxTokens=200
+            )
+            Suggestions = TryParseSuggestions(RetryContent)
         if isinstance(Suggestions, list):
             return [str(S) for S in Suggestions[:Limit]]
         return []
-        
     except Exception as Error:
         Logger.error(f"Error during food search autocomplete: {Error}", exc_info=True)
         return []
-    except Exception:
-        return None

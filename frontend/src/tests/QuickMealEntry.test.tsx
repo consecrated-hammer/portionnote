@@ -30,7 +30,7 @@ it("navigates to add food with prefilled name when no food matches", async () =>
               ]}
               Templates={[]}
               RecentEntries={[]}
-              OnSubmit={vi.fn()}
+              OnSubmit={vi.fn(async () => {})}
               AutoFocus={false}
             />
           }
