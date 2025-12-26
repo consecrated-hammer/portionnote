@@ -210,12 +210,11 @@ export const LogPage = () => {
       return DailyLogItem;
     }
 
-    const StepsValue = Number(StepsInput || 0);
-    await CreateDailyLog(LogDate, Number.isFinite(StepsValue) ? StepsValue : 0);
+    const StepsValue = 0;
+    await CreateDailyLog(LogDate, StepsValue);
     const Response = await GetDailyLog(LogDate);
     SetDailyLogItem(Response.DailyLog);
     SetEntries(Response.Entries);
-    SetStepsInput(Response.DailyLog.Steps.toString());
     return Response.DailyLog;
   };
 

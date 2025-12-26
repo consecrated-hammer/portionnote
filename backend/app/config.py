@@ -29,7 +29,7 @@ class AppSettings(BaseSettings):
         alias="OPENAI_FALLBACK_MODELS"
     )
     OpenAiAutosuggestModel: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-5-mini",
         alias="OPENAI_AUTOSUGGEST_MODEL"
     )
     OpenAiBaseUrl: str = Field(

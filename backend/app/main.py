@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import Settings
 from app.routes import (
+    AdminUserRouter,
     AiSuggestionRouter,
     AuthRouter,
     DailyLogRouter,
@@ -130,6 +131,7 @@ App.include_router(AiSuggestionRouter, prefix="/api/suggestions")
 App.include_router(ScheduleRouter, prefix="/api/schedule")
 App.include_router(SettingsRouter, prefix="/api/settings")
 App.include_router(LogRouter, prefix="/api/logs")
+App.include_router(AdminUserRouter, prefix="/api/admin")
 
 # Global exception handler
 @App.exception_handler(Exception)

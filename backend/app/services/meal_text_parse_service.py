@@ -95,22 +95,23 @@ Rules:
             {"role": "user", "content": UserPrompt}
         ],
         Temperature=0.2,
-        MaxTokens=1400,
-        ReasoningEffort="medium",
+        MaxTokens=2000,
+        ReasoningEffort="low",
         TextVerbosity="low"
     )
 
     Data = _TryParseMealTotals(Content)
     if Data is None:
         RetryPrompt = "Return ONLY the JSON object. No extra text."
+        RetryMessages = [
+            {"role": "system", "content": RetryPrompt},
+            {"role": "user", "content": UserPrompt if not Content else Content}
+        ]
         RetryContent, _RetryModelUsed = GetOpenAiContentWithModel(
-            [
-                {"role": "system", "content": RetryPrompt},
-                {"role": "user", "content": Content}
-            ],
+            RetryMessages,
             Temperature=0.1,
-            MaxTokens=800,
-            ReasoningEffort="medium",
+            MaxTokens=2000,
+            ReasoningEffort="low",
             TextVerbosity="low"
         )
         Data = _TryParseMealTotals(RetryContent)
@@ -156,8 +157,8 @@ Rules:
                 {"role": "user", "content": UserPrompt}
             ],
             Temperature=0.1,
-            MaxTokens=1600,
-            ReasoningEffort="high",
+            MaxTokens=2000,
+            ReasoningEffort="low",
             TextVerbosity="low"
         )
         Data = _TryParseMealTotals(RetryContent)

@@ -66,7 +66,7 @@ async def DeleteMealTemplateRoute(
     CurrentUser: User = Depends(RequireUser)
 ):
     try:
-        DeleteMealTemplate(CurrentUser.UserId, MealTemplateId)
+        DeleteMealTemplate(CurrentUser.UserId, MealTemplateId, IsAdmin=CurrentUser.IsAdmin)
         return Response(status_code=204)
     except ValueError as ErrorValue:
         raise HTTPException(status_code=400, detail=str(ErrorValue)) from ErrorValue
@@ -79,7 +79,7 @@ async def UpdateMealTemplateRoute(
     CurrentUser: User = Depends(RequireUser)
 ):
     try:
-        Template = UpdateMealTemplate(CurrentUser.UserId, MealTemplateId, Input)
+        Template = UpdateMealTemplate(CurrentUser.UserId, MealTemplateId, Input, IsAdmin=CurrentUser.IsAdmin)
         return MealTemplateResponse(Template=Template)
     except ValueError as ErrorValue:
         raise HTTPException(status_code=400, detail=str(ErrorValue)) from ErrorValue

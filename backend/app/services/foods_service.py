@@ -128,7 +128,7 @@ def UpsertFood(UserId: str, Input: CreateFoodInput) -> Food:
     )
 
 
-def UpdateFood(UserId: str, FoodId: str, Input: UpdateFoodInput) -> Food:
+def UpdateFood(UserId: str, FoodId: str, Input: UpdateFoodInput, IsAdmin: bool = False) -> Food:
     # Get existing food to verify ownership
     ExistingRow = FetchOne(
         "SELECT UserId FROM Foods WHERE FoodId = ?;",
@@ -138,7 +138,7 @@ def UpdateFood(UserId: str, FoodId: str, Input: UpdateFoodInput) -> Food:
     if ExistingRow is None:
         raise ValueError("Food not found")
     
-    if ExistingRow["UserId"] != UserId:
+    if ExistingRow["UserId"] != UserId and not IsAdmin:
         raise ValueError("Unauthorized")
     
     # Build update query dynamically based on provided fields
@@ -251,7 +251,7 @@ def GetFoodById(UserId: str, FoodId: str) -> Food:
     )
 
 
-def DeleteFood(UserId: str, FoodId: str) -> None:
+def DeleteFood(UserId: str, FoodId: str, IsAdmin: bool = False) -> None:
     # Verify ownership
     ExistingRow = FetchOne(
         "SELECT UserId FROM Foods WHERE FoodId = ?;",
@@ -261,7 +261,7 @@ def DeleteFood(UserId: str, FoodId: str) -> None:
     if ExistingRow is None:
         raise ValueError("Food not found")
     
-    if ExistingRow["UserId"] != UserId:
+    if ExistingRow["UserId"] != UserId and not IsAdmin:
         raise ValueError("Unauthorized")
 
     MealEntryCount = FetchOne(

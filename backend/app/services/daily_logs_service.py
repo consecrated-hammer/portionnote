@@ -543,18 +543,28 @@ def CreateMealEntry(UserId: str, Input: CreateMealEntryInput) -> MealEntry:
     )
 
 
-def DeleteMealEntry(UserId: str, MealEntryId: str) -> None:
-    Existing = FetchOne(
-        """
-        SELECT
-            MealEntries.MealEntryId AS MealEntryId
-        FROM MealEntries
-        INNER JOIN DailyLogs
-            ON MealEntries.DailyLogId = DailyLogs.DailyLogId
-        WHERE MealEntries.MealEntryId = ? AND DailyLogs.UserId = ?;
-        """,
-        [MealEntryId, UserId]
-    )
+def DeleteMealEntry(UserId: str, MealEntryId: str, IsAdmin: bool = False) -> None:
+    if IsAdmin:
+        Existing = FetchOne(
+            """
+            SELECT MealEntryId AS MealEntryId
+            FROM MealEntries
+            WHERE MealEntryId = ?;
+            """,
+            [MealEntryId]
+        )
+    else:
+        Existing = FetchOne(
+            """
+            SELECT
+                MealEntries.MealEntryId AS MealEntryId
+            FROM MealEntries
+            INNER JOIN DailyLogs
+                ON MealEntries.DailyLogId = DailyLogs.DailyLogId
+            WHERE MealEntries.MealEntryId = ? AND DailyLogs.UserId = ?;
+            """,
+            [MealEntryId, UserId]
+        )
 
     if Existing is None:
         raise ValueError("Meal entry not found.")

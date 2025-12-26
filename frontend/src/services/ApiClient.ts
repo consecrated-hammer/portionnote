@@ -1,6 +1,9 @@
 import axios from "axios";
 import {
   AiSuggestionResponse,
+  AdminUser,
+  AdminUserCreateInput,
+  AdminUserListResponse,
   DailyLogCreateResponse,
   DailyLogResponse,
   ScheduleSlot,
@@ -161,6 +164,22 @@ export const StartGoogleLogin = (InviteCode?: string) => {
 export const CreateInvite = async (Email: string): Promise<InviteResponse> => {
   const Response = await ApiClient.post("/api/auth/invites", { Email });
   return Response.data as InviteResponse;
+};
+
+export const GetAdminUsers = async (): Promise<AdminUser[]> => {
+  const Response = await ApiClient.get("/api/admin/users");
+  const Data = Response.data as AdminUserListResponse;
+  return Array.isArray(Data?.Users) ? Data.Users : [];
+};
+
+export const CreateAdminUser = async (Input: AdminUserCreateInput): Promise<AdminUser> => {
+  const Response = await ApiClient.post("/api/admin/users", Input);
+  return Response.data.User as AdminUser;
+};
+
+export const UpdateAdminUser = async (UserId: string, IsAdmin: boolean): Promise<AdminUser> => {
+  const Response = await ApiClient.patch(`/api/admin/users/${UserId}`, { IsAdmin });
+  return Response.data.User as AdminUser;
 };
 
 export const GetGooglePendingInvite = async (): Promise<PendingGoogleInvite> => {

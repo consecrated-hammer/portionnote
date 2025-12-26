@@ -251,17 +251,34 @@ def GetMealTemplates(UserId: str) -> list[MealTemplateWithItems]:
     return Templates
 
 
-def DeleteMealTemplate(UserId: str, MealTemplateId: str) -> None:
-    Row = FetchOne(
-        """
-        SELECT MealTemplateId AS MealTemplateId
-        FROM MealTemplates
-        WHERE MealTemplateId = ? AND UserId = ?;
-        """,
-        [MealTemplateId, UserId]
-    )
+def _FetchMealTemplateRow(UserId: str, MealTemplateId: str, IsAdmin: bool) -> dict:
+    if IsAdmin:
+        Row = FetchOne(
+            """
+            SELECT MealTemplateId AS MealTemplateId, UserId AS UserId
+            FROM MealTemplates
+            WHERE MealTemplateId = ?;
+            """,
+            [MealTemplateId]
+        )
+    else:
+        Row = FetchOne(
+            """
+            SELECT MealTemplateId AS MealTemplateId, UserId AS UserId
+            FROM MealTemplates
+            WHERE MealTemplateId = ? AND UserId = ?;
+            """,
+            [MealTemplateId, UserId]
+        )
+
     if Row is None:
         raise ValueError("Template not found.")
+
+    return Row
+
+
+def DeleteMealTemplate(UserId: str, MealTemplateId: str, IsAdmin: bool = False) -> None:
+    _FetchMealTemplateRow(UserId, MealTemplateId, IsAdmin)
 
     ExecuteQuery(
         "DELETE FROM MealTemplates WHERE MealTemplateId = ?;",
@@ -269,18 +286,15 @@ def DeleteMealTemplate(UserId: str, MealTemplateId: str) -> None:
     )
 
 
-def UpdateMealTemplate(UserId: str, MealTemplateId: str, Input: UpdateMealTemplateInput) -> MealTemplateWithItems:
+def UpdateMealTemplate(
+    UserId: str,
+    MealTemplateId: str,
+    Input: UpdateMealTemplateInput,
+    IsAdmin: bool = False
+) -> MealTemplateWithItems:
     # Verify template exists and user owns it
-    Row = FetchOne(
-        """
-        SELECT MealTemplateId AS MealTemplateId
-        FROM MealTemplates
-        WHERE MealTemplateId = ? AND UserId = ?;
-        """,
-        [MealTemplateId, UserId]
-    )
-    if Row is None:
-        raise ValueError("Template not found.")
+    Row = _FetchMealTemplateRow(UserId, MealTemplateId, IsAdmin)
+    OwnerUserId = Row["UserId"]
 
     # Update template name if provided
     if Input.TemplateName is not None:
@@ -295,7 +309,7 @@ def UpdateMealTemplate(UserId: str, MealTemplateId: str, Input: UpdateMealTempla
             FROM MealTemplates
             WHERE UserId = ? AND TemplateName = ? AND MealTemplateId != ?;
             """,
-            [UserId, TemplateName, MealTemplateId]
+            [OwnerUserId, TemplateName, MealTemplateId]
         )
         if Existing is not None:
             raise ValueError("Template name already exists.")
@@ -362,7 +376,7 @@ def UpdateMealTemplate(UserId: str, MealTemplateId: str, Input: UpdateMealTempla
                 ]
             )
 
-    return GetMealTemplate(UserId, MealTemplateId)
+    return GetMealTemplate(OwnerUserId, MealTemplateId)
 
 
 def ApplyMealTemplate(UserId: str, MealTemplateId: str, LogDate: str) -> ApplyMealTemplateResponse:

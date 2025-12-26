@@ -1741,7 +1741,7 @@ export const FoodsPage = () => {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {(!Food.OwnerUserId || Food.OwnerUserId === CurrentUser?.UserId) && (
+                              {(CurrentUser?.IsAdmin || !Food.OwnerUserId || Food.OwnerUserId === CurrentUser?.UserId) && (
                                 <>
                                   <button
                                     className="text-Ink/60 hover:text-Ink transition-colors"

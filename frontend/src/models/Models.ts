@@ -138,6 +138,28 @@ export type User = {
   IsAdmin: boolean;
 };
 
+export type AdminUser = {
+  UserId: string;
+  Email: string;
+  FirstName?: string | null;
+  LastName?: string | null;
+  AuthProvider: string;
+  IsAdmin: boolean;
+  CreatedAt?: string | null;
+};
+
+export type AdminUserListResponse = {
+  Users: AdminUser[];
+};
+
+export type AdminUserCreateInput = {
+  Email: string;
+  Password: string;
+  FirstName: string;
+  LastName?: string;
+  IsAdmin: boolean;
+};
+
 export type UpdateProfileInput = {
   FirstName?: string;
   LastName?: string;

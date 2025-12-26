@@ -496,26 +496,26 @@ def SearchAustralianFoodSuggestions(Query: str, Limit: int = 10) -> list[str]:
     if not Settings.OpenAiApiKey or len(Query) < 2:
         return []
 
-    SystemPrompt = """You are a food search assistant specializing in Australian foods and brands.
-Given a partial food name, suggest complete Australian food items that match.
+    Limit = min(Limit, 5)
 
-PRIORITY ORDER:
-1. Popular Australian brands (Tim Tams, Arnott's, Vegemite, Shapes, Milo, etc.)
-2. Common Australian food products
-3. Generic foods available in Australia
-4. Fresh produce and common ingredients
+    SystemPrompt = """You are a food search assistant specialising in Australian foods and brands.
 
-Return ONLY a JSON array of string suggestions, ordered by relevance.
-Be specific with product names and brands where possible.
-Maximum 10 suggestions.
+Input will be a single, messy line describing ONE meal/order (combined), possibly with typos and informal wording.
 
-Example for "tim":
-["Tim Tam Original", "Tim Tam Dark Chocolate", "Tim Tam Chewy Caramel"]
+Task:
+- Infer the best matching Australian food entry for the entire line as one combined order (do not split into individual ingredients/items).
+- Prefer Australian brands and menus (eg Hungry Jack's AU, Macca's AU, KFC AU, Sanitarium, Arnott's).
+- Be robust to spelling mistakes.
+- Preserve key qualifiers when present (eg Large/Medium/Small, lite/skim, flavour, meal/combo, shake, sundae).
+- Do not invent specific products. If an exact branded match is unclear, return a generic combined description that is still plausible in Australia.
 
-Example for "veg":
-["Vegemite", "Vegetables Mixed Frozen", "Vegetable Oil"]"""
+Output:
+Return ONLY a JSON array of strings, ordered by relevance, max 5.
+- If size is specified, return exactly 1 suggestion reflecting that size.
+- If size is NOT specified and size variants commonly exist, return 2-3 suggestions varying only by size (eg Small/Medium/Large), keeping all other details the same.
+No explanations. No extra fields."""
 
-    UserPrompt = f'Suggest Australian foods matching: "{Query}"'
+    UserPrompt = Query.strip()
 
     def TryParseSuggestions(ContentValue: str) -> list[str] | None:
         if not ContentValue:
@@ -544,7 +544,7 @@ Example for "veg":
         return None
 
     try:
-        AutosuggestModel = Settings.OpenAiAutosuggestModel or "gpt-4o-mini"
+        AutosuggestModel = Settings.OpenAiAutosuggestModel or "gpt-5-mini"
         try:
             Content, _ModelUsed = GetOpenAiContentForModel(
                 AutosuggestModel,

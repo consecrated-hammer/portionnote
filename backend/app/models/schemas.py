@@ -207,6 +207,20 @@ class User(BaseModel):
     IsAdmin: bool
 
 
+class AdminUserSummary(BaseModel):
+    UserId: str
+    Email: str
+    FirstName: Optional[str] = None
+    LastName: Optional[str] = None
+    AuthProvider: str
+    IsAdmin: bool
+    CreatedAt: Optional[str] = None
+
+
+class AdminUserListResponse(BaseModel):
+    Users: list[AdminUserSummary]
+
+
 class UpdateProfileInput(BaseModel):
     FirstName: Optional[str] = Field(default=None, max_length=100)
     LastName: Optional[str] = Field(default=None, max_length=100)
@@ -214,6 +228,18 @@ class UpdateProfileInput(BaseModel):
     HeightCm: Optional[int] = Field(default=None, ge=50, le=300)
     WeightKg: Optional[float] = Field(default=None, ge=20, le=500)
     ActivityLevel: Optional[str] = Field(default=None)
+
+
+class AdminUserCreateInput(BaseModel):
+    Email: str = Field(min_length=1)
+    Password: str = Field(min_length=8)
+    FirstName: str = Field(min_length=1)
+    LastName: Optional[str] = None
+    IsAdmin: bool = False
+
+
+class AdminUserUpdateInput(BaseModel):
+    IsAdmin: bool
 
 
 class Suggestion(BaseModel):
