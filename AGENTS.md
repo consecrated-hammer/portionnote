@@ -78,6 +78,7 @@ If tests are slow, prioritise Tier 1 during implementation, then Tier 2 at the e
 - Small commits, descriptive messages.
 - Update README when behaviour or setup changes.
 - Keep scripts repeatable and CI-friendly.
+- Main is protected. Create a new branch for changes and open a PR.
 
 ## Completion Definition
 A task is “done” when:

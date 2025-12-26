@@ -18,7 +18,7 @@ if [[ "${SKIP_NPM_INSTALL:-0}" != "1" ]] && [[ ! -x "node_modules/.bin/vite" ]];
 fi
 
 export VITE_API_BASE_URL="${VITE_API_BASE_URL:-/}"
-export VITE_API_PROXY_TARGET="${VITE_API_PROXY_TARGET:-http://localhost:8000}"
+export VITE_API_PROXY_TARGET="${VITE_API_PROXY_TARGET:-http://localhost:8001}"
 
 if [[ "${1:-}" == "test" ]]; then
   exec npm test -- "${@:2}"
