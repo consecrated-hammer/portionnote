@@ -131,7 +131,8 @@ def _RequestOpenAiContent(
         Payload: dict[str, Any] = {
             "model": Model,
             "input": _BuildResponsesInput(Messages),
-            "text": {"format": {"type": "text"}}
+            "reasoning": {"effort": "low"},
+            "text": {"format": {"type": "text"}, "verbosity": "low"}
         }
         if SupportsTemperature:
             Payload["temperature"] = Temperature
