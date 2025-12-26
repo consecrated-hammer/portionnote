@@ -30,8 +30,7 @@ Common optional settings:
 
 ```bash
 OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o-mini
-SCRAPER_API_KEY=
+OPENAI_MODEL=gpt-5-mini
 ```
 
 ## Authentication notes
@@ -52,10 +51,8 @@ SCRAPER_API_KEY=
 Portion Note can enrich food search using these sources:
 
 - OpenFoodFacts (primary)
-- Coles and Woolworths via ScraperAPI (optional)
 - AI fallback for unmatched items
-
-To enable scraping, set `SCRAPER_API_KEY`. AI fallback uses `OPENAI_API_KEY`.
+AI fallback uses `OPENAI_API_KEY`.
 
 ## Development
 

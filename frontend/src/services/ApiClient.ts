@@ -262,25 +262,12 @@ export const LookupFoodOptionsByText = async (Query: string): Promise<Array<{
   return Response.data.Results;
 };
 
-export const SearchFoodDatabases = async (Query: string, IncludeScraping: boolean = false): Promise<{
+export const SearchFoodDatabases = async (Query: string): Promise<{
   Openfoodfacts: any[];
-  Coles: any[];
-  Woolworths: any[];
   AiFallbackAvailable: boolean;
 }> => {
-  const Response = await ApiClient.post("/api/food-lookup/multi-source/search", { 
-    Query, 
-    IncludeScraping 
-  });
+  const Response = await ApiClient.post("/api/food-lookup/multi-source/search", { Query });
   return Response.data;
-};
-
-export const GetProductDetails = async (Source: string, ProductUrl: string): Promise<any> => {
-  const Response = await ApiClient.post("/api/food-lookup/multi-source/details", {
-    Source,
-    ProductUrl
-  });
-  return Response.data.Result;
 };
 
 export const DeleteFood = async (FoodId: string): Promise<void> => {
