@@ -5,14 +5,14 @@ import httpx
 from app.config import Settings
 
 
-def _ShouldUseResponsesEndpoint() -> bool:
+def _ShouldUseResponsesEndpoint(Model: str) -> bool:
     if Settings.OpenAiBaseUrl.rstrip("/").endswith("/responses"):
         return True
-    return Settings.OpenAiModel.startswith("gpt-5")
+    return Model.startswith("gpt-5")
 
 
-def _SupportsTemperature(UseResponses: bool) -> bool:
-    if UseResponses and Settings.OpenAiModel.startswith("gpt-5"):
+def _SupportsTemperature(UseResponses: bool, Model: str) -> bool:
+    if UseResponses and Model.startswith("gpt-5"):
         return False
     return True
 
@@ -89,18 +89,47 @@ def _ExtractOpenAiContent(Data: dict[str, Any]) -> str:
     return ""
 
 
-def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxTokens: int | None = None) -> str:
+def _IsModelError(ResponseData: dict[str, Any] | None, StatusCode: int) -> bool:
+    if StatusCode not in (400, 404):
+        return False
+    if not isinstance(ResponseData, dict):
+        return False
+    ErrorData = ResponseData.get("error", {})
+    if not isinstance(ErrorData, dict):
+        return False
+    Code = str(ErrorData.get("code", "")).lower()
+    Param = str(ErrorData.get("param", "")).lower()
+    Message = str(ErrorData.get("message", "")).lower()
+    if Code in {"unsupported_value", "model_not_found"}:
+        return True
+    if Param == "model":
+        return True
+    return "model" in Message
+
+
+def _ParseFallbackModels() -> list[str]:
+    Raw = Settings.OpenAiFallbackModels or ""
+    Models = [Item.strip() for Item in Raw.split(",") if Item.strip()]
+    return Models
+
+
+def _RequestOpenAiContent(
+    Model: str,
+    Messages: list[dict[str, Any]],
+    Temperature: float,
+    MaxTokens: int | None
+) -> str:
     if not Settings.OpenAiApiKey:
         raise ValueError("OpenAI API key not configured.")
 
-    UseResponses = _ShouldUseResponsesEndpoint()
+    UseResponses = _ShouldUseResponsesEndpoint(Model)
     Url = _ResolveOpenAiUrl(UseResponses)
 
-    SupportsTemperature = _SupportsTemperature(UseResponses)
+    SupportsTemperature = _SupportsTemperature(UseResponses, Model)
 
     if UseResponses:
         Payload: dict[str, Any] = {
-            "model": Settings.OpenAiModel,
+            "model": Model,
             "input": _BuildResponsesInput(Messages)
         }
         if SupportsTemperature:
@@ -109,7 +138,7 @@ def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxToke
             Payload["max_output_tokens"] = MaxTokens
     else:
         Payload = {
-            "model": Settings.OpenAiModel,
+            "model": Model,
             "messages": Messages
         }
         if SupportsTemperature:
@@ -132,6 +161,32 @@ def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxToke
         Response.raise_for_status()
     except httpx.HTTPStatusError as ErrorValue:
         Detail = Response.text.strip()
+        try:
+            ResponseData = Response.json()
+        except ValueError:
+            ResponseData = None
+        if _IsModelError(ResponseData, Response.status_code):
+            raise ValueError("OpenAI model unavailable.") from ErrorValue
         raise ValueError(f"OpenAI request failed ({Response.status_code}) at {Url}: {Detail}") from ErrorValue
     Data = Response.json()
     return _ExtractOpenAiContent(Data)
+
+
+def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxTokens: int | None = None) -> str:
+    ModelsToTry = [Settings.OpenAiModel]
+    for Model in _ParseFallbackModels():
+        if Model not in ModelsToTry:
+            ModelsToTry.append(Model)
+
+    LastError: Exception | None = None
+    for Model in ModelsToTry:
+        try:
+            return _RequestOpenAiContent(Model, Messages, Temperature, MaxTokens)
+        except ValueError as ErrorValue:
+            LastError = ErrorValue
+            if str(ErrorValue) != "OpenAI model unavailable.":
+                break
+
+    if LastError is not None:
+        raise LastError
+    raise ValueError("OpenAI request failed.")

@@ -24,6 +24,10 @@ class AppSettings(BaseSettings):
     SeedGoogleAdmins: str = Field(default="", alias="SEED_GOOGLE_ADMINS")
     OpenAiApiKey: str | None = Field(default=None, alias="OPENAI_API_KEY")
     OpenAiModel: str = Field(default="gpt-5-mini", alias="OPENAI_MODEL")
+    OpenAiFallbackModels: str = Field(
+        default="gpt-4.1,gpt-4o-mini",
+        alias="OPENAI_FALLBACK_MODELS"
+    )
     OpenAiBaseUrl: str = Field(
         default="https://api.openai.com/v1/chat/completions",
         alias="OPENAI_BASE_URL"
