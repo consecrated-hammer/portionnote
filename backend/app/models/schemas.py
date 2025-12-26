@@ -15,6 +15,7 @@ class MealType(str, Enum):
 
 class Food(BaseModel):
     FoodId: str
+    OwnerUserId: Optional[str] = None
     FoodName: str
     ServingDescription: str  # Deprecated: use ServingQuantity + ServingUnit
     ServingQuantity: float = 1.0
@@ -67,6 +68,9 @@ class MealEntry(BaseModel):
     FoodId: Optional[str] = None
     MealTemplateId: Optional[str] = None
     Quantity: float
+    EntryQuantity: Optional[float] = None
+    EntryUnit: Optional[str] = None
+    ConversionDetail: Optional[str] = None
     EntryNotes: Optional[str] = None
     SortOrder: int
     ScheduleSlotId: Optional[str] = None
@@ -91,6 +95,9 @@ class MealEntryWithFood(BaseModel):
     SugarPerServing: Optional[float] = None
     SodiumPerServing: Optional[float] = None
     Quantity: float
+    EntryQuantity: Optional[float] = None
+    EntryUnit: Optional[str] = None
+    ConversionDetail: Optional[str] = None
     EntryNotes: Optional[str] = None
     SortOrder: int
     ScheduleSlotId: Optional[str] = None
@@ -316,6 +323,8 @@ class CreateMealEntryInput(BaseModel):
     FoodId: Optional[str] = None
     MealTemplateId: Optional[str] = None
     Quantity: float = Field(gt=0)
+    EntryQuantity: Optional[float] = Field(default=None, gt=0)
+    EntryUnit: Optional[str] = Field(default=None, min_length=1)
     EntryNotes: Optional[str] = None
     SortOrder: int = 0
     ScheduleSlotId: Optional[str] = None

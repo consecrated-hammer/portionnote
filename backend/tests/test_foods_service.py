@@ -118,8 +118,8 @@ def test_GetFoodById_NotFound(test_user_id):
         GetFoodById(test_user_id, "NonExistentId")
 
 
-def test_GetFoodById_WrongUser(test_user_id):
-    """Test getting food from different user returns not found"""
+def test_GetFoodById_SharedAccess(test_user_id):
+    """Test getting food from different user still returns the food"""
     Input = CreateFoodInput(
         FoodName="Grape",
         ServingQuantity=1.0,
@@ -130,8 +130,10 @@ def test_GetFoodById_WrongUser(test_user_id):
     )
     Created = UpsertFood(test_user_id, Input)
     
-    with pytest.raises(ValueError, match="Food not found"):
-        GetFoodById(CreateSecondUser(test_user_id), Created.FoodId)
+    OtherUser = CreateSecondUser(test_user_id)
+    Retrieved = GetFoodById(OtherUser, Created.FoodId)
+    assert Retrieved.FoodId == Created.FoodId
+    assert Retrieved.FoodName == "Grape"
 
 
 def test_UpdateFood_AllFields(test_user_id):

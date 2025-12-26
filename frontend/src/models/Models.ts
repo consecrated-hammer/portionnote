@@ -1,5 +1,6 @@
 export type Food = {
   FoodId: string;
+  OwnerUserId?: string | null;
   FoodName: string;
   ServingDescription: string;  // Deprecated
   ServingQuantity: number;
@@ -48,6 +49,9 @@ export type MealEntryWithFood = {
   SugarPerServing?: number | null;
   SodiumPerServing?: number | null;
   Quantity: number;
+  EntryQuantity?: number | null;
+  EntryUnit?: string | null;
+  ConversionDetail?: string | null;
   EntryNotes?: string | null;
   SortOrder: number;
   ScheduleSlotId?: string | null;

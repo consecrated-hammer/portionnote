@@ -50,9 +50,9 @@ def CreateMealTemplate(UserId: str, Input: CreateMealTemplateInput) -> MealTempl
             """
             SELECT FoodId AS FoodId
             FROM Foods
-            WHERE FoodId = ? AND UserId = ?;
+            WHERE FoodId = ?;
             """,
-            [Item.FoodId, UserId]
+            [Item.FoodId]
         )
         if FoodRow is None:
             raise ValueError("Food not found.")
@@ -282,9 +282,9 @@ def UpdateMealTemplate(UserId: str, MealTemplateId: str, Input: UpdateMealTempla
                 """
                 SELECT FoodId AS FoodId
                 FROM Foods
-                WHERE FoodId = ? AND UserId = ?;
+                WHERE FoodId = ?;
                 """,
-                [Item.FoodId, UserId]
+                [Item.FoodId]
             )
             if FoodRow is None:
                 raise ValueError("Food not found.")

@@ -8,6 +8,7 @@ from app.models.schemas import (
     MealEntryWithFood,
     Targets
 )
+from app.services.serving_conversion_service import ConvertEntryToServings
 from app.utils.database import ExecuteQuery, FetchAll, FetchOne
 from app.utils.defaults import DefaultTargets
 
@@ -139,6 +140,9 @@ def GetEntriesForLog(UserId: str, DailyLogId: str) -> list[MealEntryWithFood]:
             MealEntries.FoodId AS FoodId,
             MealEntries.MealTemplateId AS MealTemplateId,
             MealEntries.Quantity AS Quantity,
+            MealEntries.EntryQuantity AS EntryQuantity,
+            MealEntries.EntryUnit AS EntryUnit,
+            MealEntries.ConversionDetail AS ConversionDetail,
             MealEntries.EntryNotes AS EntryNotes,
             MealEntries.SortOrder AS SortOrder,
             MealEntries.ScheduleSlotId AS ScheduleSlotId,
@@ -215,6 +219,9 @@ def GetEntriesForLog(UserId: str, DailyLogId: str) -> list[MealEntryWithFood]:
                     SugarPerServing=float(TotalSugar) if TotalSugar else None,
                     SodiumPerServing=float(TotalSodium) if TotalSodium else None,
                     Quantity=1.0,
+                    EntryQuantity=None,
+                    EntryUnit=None,
+                    ConversionDetail=None,
                     EntryNotes=Row["EntryNotes"],
                     SortOrder=int(Row["SortOrder"]),
                     ScheduleSlotId=Row["ScheduleSlotId"],
@@ -241,6 +248,9 @@ def GetEntriesForLog(UserId: str, DailyLogId: str) -> list[MealEntryWithFood]:
                     SugarPerServing=float(Row["SugarPerServing"]) if Row["SugarPerServing"] else None,
                     SodiumPerServing=float(Row["SodiumPerServing"]) if Row["SodiumPerServing"] else None,
                     Quantity=float(Row["Quantity"]),
+                    EntryQuantity=float(Row["EntryQuantity"]) if Row["EntryQuantity"] is not None else None,
+                    EntryUnit=Row["EntryUnit"],
+                    ConversionDetail=Row["ConversionDetail"],
                     EntryNotes=Row["EntryNotes"],
                     SortOrder=int(Row["SortOrder"]),
                     ScheduleSlotId=Row["ScheduleSlotId"],
@@ -388,15 +398,19 @@ def CreateMealEntry(UserId: str, Input: CreateMealEntryInput) -> MealEntry:
     if (Input.FoodId and Input.MealTemplateId) or (not Input.FoodId and not Input.MealTemplateId):
         raise ValueError("Either FoodId or MealTemplateId must be provided (but not both).")
 
+    FoodRow = None
     if Input.FoodId:
         FoodRow = FetchOne(
             """
             SELECT
-                FoodId AS FoodId
+                FoodId AS FoodId,
+                FoodName AS FoodName,
+                ServingQuantity AS ServingQuantity,
+                ServingUnit AS ServingUnit
             FROM Foods
-            WHERE FoodId = ? AND UserId = ?;
+            WHERE FoodId = ?;
             """,
-            [Input.FoodId, UserId]
+            [Input.FoodId]
         )
 
         if FoodRow is None:
@@ -429,6 +443,29 @@ def CreateMealEntry(UserId: str, Input: CreateMealEntryInput) -> MealEntry:
         if SlotRow is None:
             raise ValueError("Schedule slot not found.")
 
+    Quantity = Input.Quantity
+    EntryQuantity = Input.EntryQuantity
+    EntryUnit = Input.EntryUnit
+    ConversionDetail = None
+
+    if Input.FoodId:
+        if (EntryQuantity is None) != (EntryUnit is None):
+            raise ValueError("EntryQuantity and EntryUnit must be provided together.")
+        if EntryQuantity is not None and EntryUnit is not None and FoodRow is not None:
+            Quantity, ConversionDetail, EntryUnit = ConvertEntryToServings(
+                FoodRow["FoodName"],
+                float(FoodRow["ServingQuantity"]) if FoodRow["ServingQuantity"] else 1.0,
+                FoodRow["ServingUnit"] or "serving",
+                EntryQuantity,
+                EntryUnit
+            )
+        else:
+            EntryQuantity = Input.Quantity
+            EntryUnit = "serving"
+
+    if Quantity <= 0:
+        raise ValueError("Quantity must be greater than zero.")
+
     MealEntryId = str(uuid.uuid4())
 
     ExecuteQuery(
@@ -440,10 +477,13 @@ def CreateMealEntry(UserId: str, Input: CreateMealEntryInput) -> MealEntry:
             FoodId,
             MealTemplateId,
             Quantity,
+            EntryQuantity,
+            EntryUnit,
+            ConversionDetail,
             EntryNotes,
             SortOrder,
             ScheduleSlotId
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
         """,
         [
             MealEntryId,
@@ -451,7 +491,10 @@ def CreateMealEntry(UserId: str, Input: CreateMealEntryInput) -> MealEntry:
             Input.MealType,
             Input.FoodId,
             Input.MealTemplateId,
-            Input.Quantity,
+            Quantity,
+            EntryQuantity,
+            EntryUnit,
+            ConversionDetail,
             Input.EntryNotes,
             Input.SortOrder,
             Input.ScheduleSlotId
@@ -467,6 +510,9 @@ def CreateMealEntry(UserId: str, Input: CreateMealEntryInput) -> MealEntry:
             FoodId AS FoodId,
             MealTemplateId AS MealTemplateId,
             Quantity AS Quantity,
+            EntryQuantity AS EntryQuantity,
+            EntryUnit AS EntryUnit,
+            ConversionDetail AS ConversionDetail,
             EntryNotes AS EntryNotes,
             SortOrder AS SortOrder,
             ScheduleSlotId AS ScheduleSlotId,
@@ -487,6 +533,9 @@ def CreateMealEntry(UserId: str, Input: CreateMealEntryInput) -> MealEntry:
         FoodId=Row["FoodId"],
         MealTemplateId=Row["MealTemplateId"],
         Quantity=float(Row["Quantity"]),
+        EntryQuantity=float(Row["EntryQuantity"]) if Row["EntryQuantity"] is not None else None,
+        EntryUnit=Row["EntryUnit"],
+        ConversionDetail=Row["ConversionDetail"],
         EntryNotes=Row["EntryNotes"],
         SortOrder=int(Row["SortOrder"]),
         ScheduleSlotId=Row["ScheduleSlotId"],

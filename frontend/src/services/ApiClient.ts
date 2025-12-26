@@ -341,6 +341,8 @@ export const CreateMealEntry = async (Input: {
   FoodId?: string | null;
   MealTemplateId?: string | null;
   Quantity: number;
+  EntryQuantity?: number | null;
+  EntryUnit?: string | null;
   EntryNotes?: string | null;
   SortOrder?: number;
   ScheduleSlotId?: string | null;
@@ -351,6 +353,8 @@ export const CreateMealEntry = async (Input: {
     FoodId: Input.FoodId ?? null,
     MealTemplateId: Input.MealTemplateId ?? null,
     Quantity: Input.Quantity,
+    EntryQuantity: Input.EntryQuantity ?? null,
+    EntryUnit: Input.EntryUnit ?? null,
     EntryNotes: Input.EntryNotes ?? null,
     SortOrder: Input.SortOrder ?? 0,
     ScheduleSlotId: Input.ScheduleSlotId ?? null

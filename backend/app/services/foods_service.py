@@ -8,16 +8,15 @@ def GetFoods(UserId: str) -> list[Food]:
     Rows = FetchAll(
         """
         SELECT
+            UserId,
             FoodId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
             CaloriesPerServing, ProteinPerServing,
             FibrePerServing, CarbsPerServing, FatPerServing,
             SaturatedFatPerServing, SugarPerServing, SodiumPerServing,
             DataSource, CountryCode, IsFavourite, CreatedAt
         FROM Foods
-        WHERE UserId = ?
         ORDER BY FoodName ASC;
-        """,
-        [UserId]
+        """
     )
 
     Foods: list[Food] = []
@@ -25,6 +24,7 @@ def GetFoods(UserId: str) -> list[Food]:
         Foods.append(
             Food(
                 FoodId=Row["FoodId"],
+                OwnerUserId=Row["UserId"],
                 FoodName=Row["FoodName"],
                 ServingDescription=Row["ServingDescription"],
                 ServingQuantity=float(Row["ServingQuantity"]) if Row["ServingQuantity"] else 1.0,
@@ -93,7 +93,7 @@ def UpsertFood(UserId: str, Input: CreateFoodInput) -> Food:
     Row = FetchOne(
         """
         SELECT
-            FoodId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
+            FoodId, UserId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
             CaloriesPerServing, ProteinPerServing,
             FibrePerServing, CarbsPerServing, FatPerServing,
             SaturatedFatPerServing, SugarPerServing, SodiumPerServing,
@@ -109,6 +109,7 @@ def UpsertFood(UserId: str, Input: CreateFoodInput) -> Food:
 
     return Food(
         FoodId=Row["FoodId"],
+        OwnerUserId=Row["UserId"],
         FoodName=Row["FoodName"],
         ServingDescription=Row["ServingDescription"],
         ServingQuantity=float(Row["ServingQuantity"]) if Row["ServingQuantity"] else 1.0,
@@ -215,15 +216,15 @@ def GetFoodById(UserId: str, FoodId: str) -> Food:
     Row = FetchOne(
         """
         SELECT
-            FoodId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
+            FoodId, UserId, FoodName, ServingDescription, ServingQuantity, ServingUnit,
             CaloriesPerServing, ProteinPerServing,
             FibrePerServing, CarbsPerServing, FatPerServing,
             SaturatedFatPerServing, SugarPerServing, SodiumPerServing,
             DataSource, CountryCode, IsFavourite
         FROM Foods
-        WHERE FoodId = ? AND UserId = ?;
+        WHERE FoodId = ?;
         """,
-        [FoodId, UserId]
+        [FoodId]
     )
     
     if Row is None:
@@ -231,6 +232,7 @@ def GetFoodById(UserId: str, FoodId: str) -> Food:
     
     return Food(
         FoodId=Row["FoodId"],
+        OwnerUserId=Row["UserId"],
         FoodName=Row["FoodName"],
         ServingDescription=Row["ServingDescription"],
         ServingQuantity=float(Row["ServingQuantity"]) if Row["ServingQuantity"] else 1.0,

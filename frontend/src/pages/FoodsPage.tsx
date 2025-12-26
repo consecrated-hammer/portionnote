@@ -3,6 +3,7 @@ import axios from "axios";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { GetFoods, CreateFood, UpdateFood, DeleteFood, GetMealTemplates, CreateMealTemplate, UpdateMealTemplate, DeleteMealTemplate, GetFoodSuggestions, LookupFoodOptionsByText, SearchFoodDatabases } from "../services/ApiClient";
 import { Food, MealTemplateWithItems, MealType } from "../models/Models";
+import { UseAuth } from "../contexts/AuthContext";
 
 const CommonServingUnits = [
   "serving", "g", "oz", "cup", "tbsp", "tsp", "mL", "piece", "slice", "small", "medium", "large"
@@ -26,6 +27,7 @@ type AiFoodOption = {
 
 export const FoodsPage = () => {
   const Navigate = useNavigate();
+  const { CurrentUser } = UseAuth();
   const [SearchParams] = useSearchParams();
   const AddFoodFlag = SearchParams.get("addFood");
   const FoodNameParam = SearchParams.get("foodName");
@@ -227,6 +229,8 @@ export const FoodsPage = () => {
       return;
     }
 
+    SetDisableAutocomplete(true);
+    SetShowSuggestions(false);
     SetIsSearchingDatabases(true);
     SetErrorMessage(null);
     SetDatabaseSearchResults(null);
@@ -257,6 +261,8 @@ export const FoodsPage = () => {
     if (!NewFoodName) return;
     
     SetIsPopulatingFromAI(true);
+    SetDisableAutocomplete(true);
+    SetShowSuggestions(false);
     SetErrorMessage(null);
     
     try {
@@ -296,6 +302,8 @@ export const FoodsPage = () => {
     SetSelectedSearchResult({ ...Result, Source });
     SetDatabaseSearchResults(null);
     SetDataSourceUsed(Source);
+    SetDisableAutocomplete(true);
+    SetShowSuggestions(false);
     
     PopulateBasicInfo(Result);
   };
@@ -1335,26 +1343,30 @@ export const FoodsPage = () => {
                           </td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              <button
-                                className="text-Ink/60 hover:text-Ink transition-colors"
-                                type="button"
-                                onClick={() => HandleEditFood(Food)}
-                                aria-label="Edit food"
-                              >
-                                <span className="material-icons text-lg">edit</span>
-                              </button>
-                              <button
-                                className="text-red-500/60 hover:text-red-500 transition-colors"
-                                type="button"
-                                onClick={() => HandleDeleteFood(Food.FoodId)}
-                                aria-label="Delete food"
-                              >
-                                <span className="material-icons text-lg">delete</span>
-                              </button>
+                              {(!Food.OwnerUserId || Food.OwnerUserId === CurrentUser?.UserId) && (
+                                <>
+                                  <button
+                                    className="text-Ink/60 hover:text-Ink transition-colors"
+                                    type="button"
+                                    onClick={() => HandleEditFood(Food)}
+                                    aria-label="Edit food"
+                                  >
+                                    <span className="material-icons text-lg">edit</span>
+                                  </button>
+                                  <button
+                                    className="text-red-500/60 hover:text-red-500 transition-colors"
+                                    type="button"
+                                    onClick={() => HandleDeleteFood(Food.FoodId)}
+                                    aria-label="Delete food"
+                                  >
+                                    <span className="material-icons text-lg">delete</span>
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </td>
-                    </tr>
-                  ))}
+                        </tr>
+                      ))}
                 </tbody>
               </table>
             </div>
