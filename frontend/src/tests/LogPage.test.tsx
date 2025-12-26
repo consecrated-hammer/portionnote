@@ -74,6 +74,6 @@ it("renders empty log state", async () => {
     </MemoryRouter>
   );
 
-  expect(screen.getByText("Daily log")).toBeInTheDocument();
-  expect(await screen.findByText("Nothing logged")).toBeInTheDocument();
+  expect(await screen.findByText("Log a meal")).toBeInTheDocument();
+  expect(await screen.findByText("Add foods first before logging a meal.")).toBeInTheDocument();
 });

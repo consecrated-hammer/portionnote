@@ -37,6 +37,14 @@ def CreateTestUser(Email: str, IsAdmin: bool = False) -> str:
     return UserId
 
 
+@pytest.fixture(autouse=True)
+def SetTestOpenAiKey():
+    OriginalKey = Settings.OpenAiApiKey
+    Settings.OpenAiApiKey = "test-key"
+    yield
+    Settings.OpenAiApiKey = OriginalKey
+
+
 @pytest.fixture()
 def temp_db(tmp_path):
     if database.DatabaseConnection is not None:
