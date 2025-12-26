@@ -16,8 +16,10 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install Playwright browsers (Chromium only for smaller image size)
-RUN playwright install chromium
-RUN playwright install-deps chromium
+ARG INSTALL_PLAYWRIGHT_BROWSERS=true
+ARG INSTALL_PLAYWRIGHT_DEPS=true
+RUN if [ "$INSTALL_PLAYWRIGHT_BROWSERS" = "true" ]; then playwright install chromium; fi
+RUN if [ "$INSTALL_PLAYWRIGHT_DEPS" = "true" ]; then playwright install-deps chromium; fi
 
 COPY . .
 

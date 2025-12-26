@@ -39,6 +39,6 @@ it("renders settings controls", async () => {
   );
 
   expect(await screen.findByText("Settings")).toBeInTheDocument();
-  expect(screen.getByText("Save changes")).toBeInTheDocument();
-  expect(screen.getByText("Sign out")).toBeInTheDocument();
+  expect(screen.getByText("AI Nutrition Recommendations")).toBeInTheDocument();
+  expect(screen.getByText("Account")).toBeInTheDocument();
 });

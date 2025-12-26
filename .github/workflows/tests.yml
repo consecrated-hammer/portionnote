@@ -39,7 +39,7 @@ jobs:
         env:
           LOG_DIR: /tmp/portionnote-logs
         run: |
-          pytest tests/ -v
+          pytest -o addopts= tests/ -v --cov=app --cov-report=term-missing
 
   frontend-tests:
     runs-on: ubuntu-latest
@@ -80,7 +80,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build backend Docker image
-        run: docker build -t portionnote-backend:test ./backend
+        run: docker build --build-arg INSTALL_PLAYWRIGHT_BROWSERS=false --build-arg INSTALL_PLAYWRIGHT_DEPS=false -t portionnote-backend:test ./backend
 
       - name: Build frontend Docker image
         run: docker build -t portionnote-frontend:test ./frontend

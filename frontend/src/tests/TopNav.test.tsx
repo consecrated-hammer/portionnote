@@ -9,8 +9,9 @@ it("renders top navigation labels", () => {
     </MemoryRouter>
   );
 
-  expect(screen.getByText("Today")).toBeInTheDocument();
+  expect(screen.getByText("TODAY")).toBeInTheDocument();
   expect(screen.getByText("Foods")).toBeInTheDocument();
   expect(screen.getByText("History")).toBeInTheDocument();
+  expect(screen.getByText("About")).toBeInTheDocument();
   expect(screen.getByText("Settings")).toBeInTheDocument();
 });

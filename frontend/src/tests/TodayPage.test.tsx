@@ -2,17 +2,28 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { TodayPage } from "../pages/TodayPage";
-import { GetDailyLog, GetScheduleSlots, GetUserSettings } from "../services/ApiClient";
+import { AuthProvider } from "../contexts/AuthContext";
+import { GetCurrentUser, GetDailyLog, GetScheduleSlots, GetUserSettings } from "../services/ApiClient";
 
 vi.mock("../services/ApiClient", () => ({
+  GetCurrentUser: vi.fn(),
   GetDailyLog: vi.fn(),
   GetScheduleSlots: vi.fn(),
   GetUserSettings: vi.fn(),
   UpdateScheduleSlots: vi.fn(),
-  UpdateUserSettings: vi.fn()
+  UpdateUserSettings: vi.fn(),
+  UpdateDailySteps: vi.fn(),
+  CreateDailyLog: vi.fn()
 }));
 
 it("shows today snapshot and quick add", async () => {
+  vi.mocked(GetCurrentUser).mockResolvedValue({
+    UserId: "User-1",
+    Email: "user@example.com",
+    FirstName: "Test",
+    LastName: "User",
+    IsAdmin: false
+  });
   vi.mocked(GetUserSettings).mockResolvedValue({
     Targets: {
       DailyCalorieTarget: 1498,
@@ -67,7 +78,9 @@ it("shows today snapshot and quick add", async () => {
 
   render(
     <MemoryRouter initialEntries={["/today"]}>
-      <TodayPage />
+      <AuthProvider>
+        <TodayPage />
+      </AuthProvider>
     </MemoryRouter>
   );
 

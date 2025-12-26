@@ -40,5 +40,5 @@ it("renders today route", async () => {
     </MemoryRouter>
   );
 
-  expect(await screen.findByText("Daily snapshot")).toBeInTheDocument();
+  expect(await screen.findByText("Daily Progress")).toBeInTheDocument();
 });
