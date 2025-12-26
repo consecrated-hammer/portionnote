@@ -25,6 +25,13 @@ def _ResolveOpenAiUrl(UseResponses: bool) -> str:
     return "https://api.openai.com/v1/responses"
 
 
+def _NormalizeResponsesContentItem(Item: dict[str, Any]) -> dict[str, Any]:
+    ItemType = Item.get("type")
+    if ItemType == "text":
+        return {"type": "input_text", "text": Item.get("text", "")}
+    return Item
+
+
 def _BuildResponsesInput(Messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Normalized: list[dict[str, Any]] = []
     for Message in Messages:
@@ -34,11 +41,11 @@ def _BuildResponsesInput(Messages: list[dict[str, Any]]) -> list[dict[str, Any]]
             ContentItems = []
             for Item in Content:
                 if isinstance(Item, dict):
-                    ContentItems.append(Item)
+                    ContentItems.append(_NormalizeResponsesContentItem(Item))
             if not ContentItems:
-                ContentItems = [{"type": "text", "text": str(Content)}]
+                ContentItems = [{"type": "input_text", "text": str(Content)}]
         else:
-            ContentItems = [{"type": "text", "text": str(Content)}]
+            ContentItems = [{"type": "input_text", "text": str(Content)}]
         Normalized.append({"role": Role, "content": ContentItems})
     return Normalized
 
@@ -111,6 +118,10 @@ def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxToke
         json=Payload,
         timeout=30.0
     )
-    Response.raise_for_status()
+    try:
+        Response.raise_for_status()
+    except httpx.HTTPStatusError as ErrorValue:
+        Detail = Response.text.strip()
+        raise ValueError(f"OpenAI request failed ({Response.status_code}) at {Url}: {Detail}") from ErrorValue
     Data = Response.json()
     return _ExtractOpenAiContent(Data)
