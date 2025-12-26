@@ -11,6 +11,12 @@ def _ShouldUseResponsesEndpoint() -> bool:
     return Settings.OpenAiModel.startswith("gpt-5")
 
 
+def _SupportsTemperature(UseResponses: bool) -> bool:
+    if UseResponses and Settings.OpenAiModel.startswith("gpt-5"):
+        return False
+    return True
+
+
 def _ResolveOpenAiUrl(UseResponses: bool) -> str:
     BaseUrl = Settings.OpenAiBaseUrl.rstrip("/")
     if not UseResponses:
@@ -90,20 +96,24 @@ def GetOpenAiContent(Messages: list[dict[str, Any]], Temperature: float, MaxToke
     UseResponses = _ShouldUseResponsesEndpoint()
     Url = _ResolveOpenAiUrl(UseResponses)
 
+    SupportsTemperature = _SupportsTemperature(UseResponses)
+
     if UseResponses:
         Payload: dict[str, Any] = {
             "model": Settings.OpenAiModel,
-            "input": _BuildResponsesInput(Messages),
-            "temperature": Temperature
+            "input": _BuildResponsesInput(Messages)
         }
+        if SupportsTemperature:
+            Payload["temperature"] = Temperature
         if MaxTokens is not None:
             Payload["max_output_tokens"] = MaxTokens
     else:
         Payload = {
             "model": Settings.OpenAiModel,
-            "messages": Messages,
-            "temperature": Temperature
+            "messages": Messages
         }
+        if SupportsTemperature:
+            Payload["temperature"] = Temperature
         if MaxTokens is not None:
             Payload["max_tokens"] = MaxTokens
 
