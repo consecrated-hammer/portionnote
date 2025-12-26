@@ -23,12 +23,11 @@ class AppSettings(BaseSettings):
     SeedGoogleUsers: str = Field(default="", alias="SEED_GOOGLE_USERS")
     SeedGoogleAdmins: str = Field(default="", alias="SEED_GOOGLE_ADMINS")
     OpenAiApiKey: str | None = Field(default=None, alias="OPENAI_API_KEY")
-    OpenAiModel: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+    OpenAiModel: str = Field(default="gpt-5-mini", alias="OPENAI_MODEL")
     OpenAiBaseUrl: str = Field(
         default="https://api.openai.com/v1/chat/completions",
         alias="OPENAI_BASE_URL"
     )
-    ScraperApiKey: str | None = Field(default=None, alias="SCRAPER_API_KEY")
 
     model_config = SettingsConfigDict(
         env_file=".env",

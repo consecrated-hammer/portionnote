@@ -10,7 +10,7 @@ from app.models.schemas import FoodInfo
 
 @pytest.mark.asyncio
 async def TestSearchWithOpenFoodFactsOnly():
-    """Test search with scraping disabled (OpenFoodFacts only)."""
+    """Test search with OpenFoodFacts only."""
     MockOFFResults = [
         FoodInfo(
             FoodName="Bega Peanut Butter",
@@ -24,60 +24,24 @@ async def TestSearchWithOpenFoodFactsOnly():
     with patch("app.services.multi_source_lookup_service.OpenFoodFactsService.SearchProducts", new_callable=AsyncMock) as MockSearch:
         MockSearch.return_value = MockOFFResults
         
-        Results = await MultiSourceFoodLookupService.Search("bega", IncludeScraping=False)
+        Results = await MultiSourceFoodLookupService.Search("bega")
         
         assert "openfoodfacts" in Results
         assert len(Results["openfoodfacts"]) == 1
         assert Results["openfoodfacts"][0].FoodName == "Bega Peanut Butter"
-        assert len(Results["coles"]) == 0
-        assert len(Results["woolworths"]) == 0
         assert Results["ai_fallback_available"] is True
 
 
 @pytest.mark.asyncio
-async def TestSearchWithAllSources():
-    """Test search with all sources enabled."""
-    MockOFFResults = [FoodInfo(FoodName="OFF Result", ServingDescription="100g", CaloriesPerServing=100, ProteinPerServing=10.0, Metadata={"source": "openfoodfacts"})]
-    MockColesResults = [FoodInfo(FoodName="Coles Result", ServingDescription="100g", CaloriesPerServing=200, ProteinPerServing=20.0, Metadata={"source": "coles"})]
-    MockWoolworthsResults = [FoodInfo(FoodName="Woolworths Result", ServingDescription="100g", CaloriesPerServing=300, ProteinPerServing=30.0, Metadata={"source": "woolworths"})]
-    
-    with patch("app.services.multi_source_lookup_service.OpenFoodFactsService.SearchProducts", new_callable=AsyncMock) as MockOFF, \
-         patch("app.services.multi_source_lookup_service.SupermarketScraperService.SearchColes", new_callable=AsyncMock) as MockColes, \
-         patch("app.services.multi_source_lookup_service.SupermarketScraperService.SearchWoolworths", new_callable=AsyncMock) as MockWoolworths:
-        
-        MockOFF.return_value = MockOFFResults
-        MockColes.return_value = MockColesResults
-        MockWoolworths.return_value = MockWoolworthsResults
-        
-        Results = await MultiSourceFoodLookupService.Search("test", IncludeScraping=True)
-        
-        assert len(Results["openfoodfacts"]) == 1
-        assert len(Results["coles"]) == 1
-        assert len(Results["woolworths"]) == 1
-        assert Results["openfoodfacts"][0].FoodName == "OFF Result"
-        assert Results["coles"][0].FoodName == "Coles Result"
-        assert Results["woolworths"][0].FoodName == "Woolworths Result"
+async def TestSearchWithErrors():
+    """Test search gracefully handles OpenFoodFacts errors."""
+    with patch("app.services.multi_source_lookup_service.OpenFoodFactsService.SearchProducts", new_callable=AsyncMock) as MockOFF:
+        MockOFF.side_effect = Exception("OpenFoodFacts failed")
 
+        Results = await MultiSourceFoodLookupService.Search("test")
 
-@pytest.mark.asyncio
-async def TestSearchWithScraperErrors():
-    """Test search gracefully handles scraper errors."""
-    MockOFFResults = [FoodInfo(FoodName="OFF Result", ServingDescription="100g", CaloriesPerServing=100, ProteinPerServing=10.0, Metadata={"source": "openfoodfacts"})]
-    
-    with patch("app.services.multi_source_lookup_service.OpenFoodFactsService.SearchProducts", new_callable=AsyncMock) as MockOFF, \
-         patch("app.services.multi_source_lookup_service.SupermarketScraperService.SearchColes", new_callable=AsyncMock) as MockColes, \
-         patch("app.services.multi_source_lookup_service.SupermarketScraperService.SearchWoolworths", new_callable=AsyncMock) as MockWoolworths:
-        
-        MockOFF.return_value = MockOFFResults
-        MockColes.side_effect = Exception("Scraping failed")
-        MockWoolworths.side_effect = Exception("Scraping failed")
-        
-        Results = await MultiSourceFoodLookupService.Search("test", IncludeScraping=True)
-        
-        # Should still return OpenFoodFacts results
-        assert len(Results["openfoodfacts"]) == 1
-        assert len(Results["coles"]) == 0
-        assert len(Results["woolworths"]) == 0
+        assert len(Results["openfoodfacts"]) == 0
+        assert Results["ai_fallback_available"] is True
 
 
 @pytest.mark.asyncio

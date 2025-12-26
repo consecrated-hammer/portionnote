@@ -3,6 +3,7 @@ Service for looking up food information using AI (text), image recognition, and 
 """
 import base64
 import json
+import re
 from typing import Optional
 
 import httpx
@@ -79,11 +80,35 @@ def ParseLookupJson(Content: str) -> object:
         raise ValueError(f"Invalid AI response format: {ErrorValue}") from ErrorValue
 
 
+def NormalizeServingSize(ServingQuantity: float, ServingUnit: str) -> tuple[float, str]:
+    UnitValue = str(ServingUnit or "").strip()
+    if not UnitValue:
+        return ServingQuantity, "serving"
+
+    Match = re.match(r"^(\d+\.?\d*)\s*([a-zA-Z]+)$", UnitValue)
+    if Match and ServingQuantity == 1.0:
+        ServingQuantity = float(Match.group(1))
+        UnitValue = Match.group(2)
+
+    UnitLower = UnitValue.lower()
+    if UnitLower in ("g", "gram", "grams", "gr"):
+        return ServingQuantity, "g"
+    if UnitLower in ("ml", "milliliter", "milliliters", "millilitre", "millilitres"):
+        return ServingQuantity, "mL"
+    if UnitLower in ("servings", "portion", "portions"):
+        return ServingQuantity, "serving"
+
+    return ServingQuantity, UnitValue
+
+
 def NormalizeFoodLookupResult(FoodData: dict, Query: str) -> FoodLookupResult:
+    ServingQuantity = float(FoodData.get("ServingQuantity", 1.0))
+    ServingUnit = FoodData.get("ServingUnit", "serving")
+    ServingQuantity, ServingUnit = NormalizeServingSize(ServingQuantity, ServingUnit)
     return FoodLookupResult(
         FoodName=FoodData.get("FoodName", Query),
-        ServingQuantity=float(FoodData.get("ServingQuantity", 1.0)),
-        ServingUnit=FoodData.get("ServingUnit", "serving"),
+        ServingQuantity=ServingQuantity,
+        ServingUnit=ServingUnit,
         CaloriesPerServing=int(FoodData.get("CaloriesPerServing", 0)),
         ProteinPerServing=float(FoodData.get("ProteinPerServing", 0)),
         FibrePerServing=float(FoodData["FibrePerServing"]) if FoodData.get("FibrePerServing") is not None else None,
@@ -119,7 +144,7 @@ Return ONLY a JSON object with these exact fields:
 {
   "FoodName": "standardized food name",
   "ServingQuantity": 1.0,
-  "ServingUnit": "unit (e.g., cup, slice, piece, 100g)",
+  "ServingUnit": "unit (e.g., g, mL, cup, slice, piece)",
   "CaloriesPerServing": integer,
   "ProteinPerServing": float (grams),
   "FibrePerServing": float (grams) or null,
@@ -130,6 +155,12 @@ Return ONLY a JSON object with these exact fields:
   "SodiumPerServing": float (mg) or null,
   "Confidence": "High" or "Medium" or "Low"
 }
+
+Serving size rules:
+- Prefer measurable units when possible: use grams (g) for solids and milliliters (mL) for liquids.
+- Avoid vague units like "serving" for basics such as milk, yogurt, rice, cereal, or vegetables.
+- Use "serving" ONLY for named menu items or combo meals, and include the size in FoodName (e.g., "Large Tropical Whopper Meal").
+- For discrete items, use clear units like piece, slice, egg, can, bar.
 
 Use standard serving sizes. Be precise with nutritional values based on USDA or Australian food databases."""
 
@@ -184,7 +215,7 @@ Return ONLY a JSON array of 1 to 3 objects with these exact fields:
   {
     "FoodName": "standardized food name including size if needed",
     "ServingQuantity": 1.0,
-    "ServingUnit": "unit (e.g., small, medium, large, cup, slice, 100g)",
+    "ServingUnit": "unit (e.g., g, mL, cup, slice, piece)",
     "CaloriesPerServing": integer,
     "ProteinPerServing": float (grams),
     "FibrePerServing": float (grams) or null,
@@ -197,7 +228,13 @@ Return ONLY a JSON array of 1 to 3 objects with these exact fields:
   }
 ]
 
-When size variants exist, include small, medium, and large. Otherwise return the most common serving sizes."""
+Serving size rules:
+- Prefer measurable units when possible: use grams (g) for solids and milliliters (mL) for liquids.
+- Avoid vague units like "serving" for basics such as milk, yogurt, rice, cereal, or vegetables.
+- Use "serving" ONLY for named menu items or combo meals, and include the size in FoodName (e.g., "Large Tropical Whopper Meal").
+- For discrete items, use clear units like piece, slice, egg, can, bar.
+
+When size variants exist for menu items or branded meals, include small, medium, and large entries. Otherwise return the most common measurable serving sizes."""
 
     Payload = {
         "model": Settings.OpenAiModel,
@@ -266,7 +303,7 @@ Return ONLY a JSON array of objects with these exact fields:
   {
     "FoodName": "ingredient name",
     "ServingQuantity": estimated quantity as float,
-    "ServingUnit": "unit (e.g., cup, tbsp, 100g, slice)",
+    "ServingUnit": "unit (e.g., g, mL, cup, tbsp, slice)",
     "CaloriesPerServing": integer,
     "ProteinPerServing": float (grams),
     "FibrePerServing": float (grams) or null,
@@ -278,6 +315,11 @@ Return ONLY a JSON array of objects with these exact fields:
     "Confidence": "High" or "Medium" or "Low"
   }
 ]
+
+Serving size rules:
+- Prefer measurable units when possible: use grams (g) for solids and milliliters (mL) for liquids.
+- For discrete items, use clear units like piece, slice, egg, can, bar.
+- Use "serving" ONLY for named menu items or combo meals, and include the size in FoodName.
 
 Provide reasonable estimates based on portion size visible in the image."""
 
@@ -337,10 +379,13 @@ Provide reasonable estimates based on portion size visible in the image."""
 
     Results = []
     for FoodData in FoodsData:
+        ServingQuantity = float(FoodData.get("ServingQuantity", 1.0))
+        ServingUnit = FoodData.get("ServingUnit", "serving")
+        ServingQuantity, ServingUnit = NormalizeServingSize(ServingQuantity, ServingUnit)
         Results.append(FoodLookupResult(
             FoodName=FoodData.get("FoodName", "Unknown Food"),
-            ServingQuantity=float(FoodData.get("ServingQuantity", 1.0)),
-            ServingUnit=FoodData.get("ServingUnit", "serving"),
+            ServingQuantity=ServingQuantity,
+            ServingUnit=ServingUnit,
             CaloriesPerServing=int(FoodData.get("CaloriesPerServing", 0)),
             ProteinPerServing=float(FoodData.get("ProteinPerServing", 0)),
             FibrePerServing=float(FoodData["FibrePerServing"]) if FoodData.get("FibrePerServing") is not None else None,

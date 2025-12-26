@@ -36,7 +36,7 @@ class Food(BaseModel):
 class FoodInfo(BaseModel):
     """
     Lightweight food information schema for external API responses.
-    Used by OpenFoodFacts, scrapers, and multi-source lookup.
+    Used by OpenFoodFacts, AI fallback, and multi-source lookup.
     """
     FoodName: str
     ServingDescription: str

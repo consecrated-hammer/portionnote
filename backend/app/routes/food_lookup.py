@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List
 
 from app.dependencies import RequireUser
 from app.models.schemas import User, FoodInfo
@@ -152,98 +152,28 @@ async def GetFoodSuggestions(
 
 class MultiSourceSearchInput(BaseModel):
     Query: str
-    IncludeScraping: bool = True  # Set to False for faster results (OpenFoodFacts only)
 
 
 class MultiSourceSearchResponse(BaseModel):
     Openfoodfacts: List[FoodInfo]
-    Coles: List[FoodInfo]
-    Woolworths: List[FoodInfo]
     AiFallbackAvailable: bool
-
-
-class ProductDetailsInput(BaseModel):
-    Source: str  # "coles" or "woolworths"
-    ProductUrl: str
-
-
-class ProductDetailsResponse(BaseModel):
-    Result: FoodInfo | None
 
 
 @FoodLookupRouter.post("/multi-source/search", response_model=MultiSourceSearchResponse, tags=["Food Lookup"])
 async def MultiSourceSearch(Input: MultiSourceSearchInput, CurrentUser: User = Depends(RequireUser)):
     """
-    Search for food across multiple sources: OpenFoodFacts, Coles, Woolworths.
-    
-    Priority order:
-    1. OpenFoodFacts (free, open database - always searched)
-    2. Coles/Woolworths (official product data - only if IncludeScraping=True)
-    3. AI fallback available if no results found
-    
-    Set IncludeScraping=False for faster results (OpenFoodFacts only).
+    Search for food using OpenFoodFacts.
+    AI fallback is available if no results are found.
     """
     try:
-        Results = await MultiSourceFoodLookupService.Search(
-            Input.Query, 
-            IncludeScraping=Input.IncludeScraping
-        )
+        Results = await MultiSourceFoodLookupService.Search(Input.Query)
         
         return MultiSourceSearchResponse(
             Openfoodfacts=Results.get("openfoodfacts", []),
-            Coles=Results.get("coles", []),
-            Woolworths=Results.get("woolworths", []),
             AiFallbackAvailable=Results.get("ai_fallback_available", True)
         )
     except Exception as ErrorValue:
         raise HTTPException(status_code=500, detail=f"Multi-source search failed: {str(ErrorValue)}") from ErrorValue
-
-
-@FoodLookupRouter.post("/multi-source/details", response_model=ProductDetailsResponse, tags=["Food Lookup"])
-async def GetProductDetails(Input: ProductDetailsInput, CurrentUser: User = Depends(RequireUser)):
-    """
-    Get detailed nutrition information for a specific Coles or Woolworths product.
-    
-    Use this to fetch full nutrition data after selecting a product from search results.
-    """
-    try:
-        Result = await MultiSourceFoodLookupService.GetProductDetails(
-            Input.Source,
-            Input.ProductUrl
-        )
-        
-        return ProductDetailsResponse(Result=Result)
-    except Exception as ErrorValue:
-        raise HTTPException(status_code=500, detail=f"Failed to fetch product details: {str(ErrorValue)}") from ErrorValue
-
-
-@FoodLookupRouter.post("/multi-source/ai-fallback", response_model=TextLookupResponse, tags=["Food Lookup"])
-async def GetAIFallback(Input: TextLookupInput, CurrentUser: User = Depends(RequireUser)):
-    """
-    Get AI-generated food information as fallback when no results found in databases.
-    """
-    try:
-        Result = MultiSourceFoodLookupService.GetAIFallback(Input.Query)
-        
-        return TextLookupResponse(
-            Result=FoodLookupResponse(
-                FoodName=Result.FoodName,
-                ServingQuantity=1.0,
-                ServingUnit=Result.ServingDescription,
-                CaloriesPerServing=Result.CaloriesPerServing or 0,
-                ProteinPerServing=Result.ProteinPerServing or 0.0,
-                FibrePerServing=Result.FiberPerServing,
-                CarbsPerServing=Result.CarbohydratesPerServing,
-                FatPerServing=Result.FatPerServing,
-                SaturatedFatPerServing=Result.SaturatedFatPerServing,
-                SugarPerServing=Result.SugarPerServing,
-                SodiumPerServing=Result.SodiumPerServing,
-                Source=Result.Metadata.get("source", "ai"),
-                Confidence=Result.Metadata.get("confidence", "low")
-            )
-        )
-    except Exception as ErrorValue:
-        raise HTTPException(status_code=500, detail=f"AI fallback failed: {str(ErrorValue)}") from ErrorValue
 
 
 @FoodLookupRouter.get("/multi-source/cache-stats", tags=["Food Lookup"])

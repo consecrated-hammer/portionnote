@@ -1,23 +1,18 @@
 """
-Multi-source food lookup service.
+Food lookup service.
 
-Prioritizes data sources:
+Sources:
 1. OpenFoodFacts (free, open, comprehensive)
-2. Coles/Woolworths scrapers (official product data)
-3. AI fallback (for items not in databases)
+2. AI fallback (for items not in databases)
 
-Results are cached to minimize repeated scraping.
+Results are cached to minimize repeated calls.
 """
 
-from typing import List, Optional, Dict, Any, Union
-import asyncio
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
-import json
 
 from app.models.schemas import FoodInfo
 from app.services.openfoodfacts_service import OpenFoodFactsService
-from app.services.supermarket_scraper_service import SupermarketScraperService
-from app.services.food_lookup_service import LookupFoodByText
 from app.utils.logger import GetLogger
 
 
@@ -28,28 +23,25 @@ Logger = GetLogger("multi_source_lookup_service")
 
 
 class MultiSourceFoodLookupService:
-    """Unified food lookup service across multiple data sources."""
+    """Food lookup service for OpenFoodFacts with caching."""
     
     @classmethod
-    async def Search(cls, Query: str, IncludeScraping: bool = True) -> Dict[str, List[FoodInfo]]:
+    async def Search(cls, Query: str) -> Dict[str, List[FoodInfo]]:
         """
-        Search for food across all sources.
+        Search for food across OpenFoodFacts.
         
         Args:
             Query: Search term (e.g., "bega crunchy")
-            IncludeScraping: Whether to include supermarket scraping (can be slow)
             
         Returns:
             Dict with results grouped by source:
             {
                 "openfoodfacts": [FoodInfo, ...],
-                "coles": [FoodInfo, ...],
-                "woolworths": [FoodInfo, ...],
                 "ai_fallback_available": True/False
             }
         """
         # Check cache first
-        CacheKey = f"search:{Query}:{IncludeScraping}"
+        CacheKey = f"search:{Query}"
         if CacheKey in _CACHE:
             CachedResults, CachedTime = _CACHE[CacheKey]
             if datetime.now() - CachedTime < _CACHE_TTL:
@@ -57,8 +49,6 @@ class MultiSourceFoodLookupService:
         
         Results = {
             "openfoodfacts": [],
-            "coles": [],
-            "woolworths": [],
             "ai_fallback_available": True
         }
         
@@ -69,69 +59,12 @@ class MultiSourceFoodLookupService:
         except Exception as E:
             Logger.warning(f"OpenFoodFacts search error: {E}", exc_info=True)
         
-        # Conditionally fetch from supermarkets (slow)
-        if IncludeScraping:
-            try:
-                # Run both scrapers in parallel
-                ColesTask = SupermarketScraperService.SearchColes(Query, Limit=5)
-                WoolworthsTask = SupermarketScraperService.SearchWoolworths(Query, Limit=5)
-                
-                ColesResults, WoolworthsResults = await asyncio.gather(
-                    ColesTask,
-                    WoolworthsTask,
-                    return_exceptions=True
-                )
-                
-                if not isinstance(ColesResults, Exception):
-                    Results["coles"] = ColesResults
-                if not isinstance(WoolworthsResults, Exception):
-                    Results["woolworths"] = WoolworthsResults
-            
-            except Exception as E:
-                Logger.warning(f"Supermarket scraping error: {E}", exc_info=True)
-        
         # Cache results
         _CACHE[CacheKey] = (Results, datetime.now())
         
         return Results
     
     @classmethod
-    async def GetProductDetails(cls, Source: str, ProductUrl: str) -> Optional[FoodInfo]:
-        """
-        Get detailed nutrition information for a specific product.
-        
-        Args:
-            Source: "coles" or "woolworths"
-            ProductUrl: Full URL to product page
-            
-        Returns:
-            FoodInfo with complete nutrition data
-        """
-        # Check cache
-        CacheKey = f"details:{Source}:{ProductUrl}"
-        if CacheKey in _CACHE:
-            CachedResult, CachedTime = _CACHE[CacheKey]
-            if datetime.now() - CachedTime < _CACHE_TTL:
-                return CachedResult
-        
-        try:
-            if Source == "coles":
-                Result = await SupermarketScraperService.GetColesProductDetails(ProductUrl)
-            elif Source == "woolworths":
-                Result = await SupermarketScraperService.GetWoolworthsProductDetails(ProductUrl)
-            else:
-                return None
-            
-            # Cache result
-            if Result:
-                _CACHE[CacheKey] = (Result, datetime.now())
-            
-            return Result
-        
-        except Exception as E:
-            Logger.warning(f"Product details fetch error: {E}", exc_info=True)
-            return None
-    
     @classmethod
     async def GetByBarcode(cls, Barcode: str) -> Optional[FoodInfo]:
         """
@@ -164,37 +97,6 @@ class MultiSourceFoodLookupService:
             return None
     
     @classmethod
-    def GetAIFallback(cls, Query: str) -> FoodInfo:
-        """
-        Get AI-generated food information as fallback.
-        
-        Args:
-            Query: Food description
-            
-        Returns:
-            FoodInfo from AI
-        """
-        # Use existing AI lookup service (synchronous)
-        Result = LookupFoodByText(Query)
-        
-        # Convert to FoodInfo format
-        return FoodInfo(
-            FoodName=Result.FoodName,
-            ServingDescription=f"{Result.ServingQuantity} {Result.ServingUnit}",
-            CaloriesPerServing=Result.CaloriesPerServing,
-            ProteinPerServing=Result.ProteinPerServing,
-            FatPerServing=Result.FatPerServing,
-            SaturatedFatPerServing=Result.SaturatedFatPerServing,
-            CarbohydratesPerServing=Result.CarbsPerServing,
-            SugarPerServing=Result.SugarPerServing,
-            FiberPerServing=Result.FibrePerServing,
-            SodiumPerServing=Result.SodiumPerServing,
-            Metadata={
-                "source": "ai",
-                "confidence": Result.Confidence
-            }
-        )
-    
     @classmethod
     def ClearCache(cls):
         """Clear all cached results."""
